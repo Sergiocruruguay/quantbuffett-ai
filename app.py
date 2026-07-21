@@ -153,13 +153,31 @@ def obtener_datos_alpha_vantage(ticker: str) -> dict:
 
 
 def obtener_datos_financieros(ticker: str) -> dict:
-    """Obtiene datos financieros. PRIORIDAD: Real → Mock"""
+    """Obtiene datos financieros. SIEMPRE prioriza Alpha Vantage."""
     ticker_upper = ticker.upper()
+    
+    # SIEMPRE intentar Alpha Vantage primero, incluso si existe en MOCK_DATABASE
     datos_reales = obtener_datos_alpha_vantage(ticker_upper)
     
     if datos_reales and datos_reales.get('precio', 0) > 0:
-        return datos_reales
+        # ACTUALIZAR MOCK_DATABASE con datos reales
+        mock_existente = MOCK_DATABASE.get(ticker_upper, {})
+        
+        # Combinar: datos reales + campos que Alpha Vantage no proporciona
+        datos_combinados = {
+            **datos_reales,  # Datos reales de Alpha Vantage
+            'deuda_ebitda': mock_existente.get('deuda_ebitda', 1.0),
+            'fcf': mock_existente.get('fcf', 0),
+            'margen_seguridad': mock_existente.get('margen_seguridad', 0),
+            'ebit': mock_existente.get('ebit', 0),
+        }
+        
+        # Actualizar MOCK_DATABASE con datos combinados
+        MOCK_DATABASE[ticker_upper] = datos_combinados
+        
+        return datos_combinados
     
+    # Fallback a mock solo si Alpha Vantage falla
     if ticker_upper in MOCK_DATABASE:
         datos = MOCK_DATABASE[ticker_upper].copy()
         datos['es_real'] = False
