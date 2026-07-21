@@ -1,7 +1,7 @@
 """
 QuantBuffett AI - Plataforma de Análisis Financiero Profesional
 Autor: [Tu Nombre]
-Versión: 0.2.1 (Con caché y manejo de rate limiting)
+Versión: 0.2.2 (Versión simplificada y robusta)
 """
 
 import streamlit as st
@@ -13,7 +13,7 @@ import os
 # Agregar src al path para importar módulos
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.data_fetcher import obtener_datos_financieros, FinancialDataFetcher
+from src.data_fetcher import obtener_datos_financieros
 
 # ==============================================================================
 # CONFIGURACIÓN DE LA PÁGINA
@@ -24,25 +24,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# ==============================================================================
-# FUNCIONES AUXILIARES
-# ==============================================================================
-def mostrar_metrica_con_tooltip(label: str, value: str, delta: str = None, tooltip: str = ""):
-    """Muestra una métrica con tooltip explicativo."""
-    col = st.columns(1)[0]
-    with col:
-        st.markdown(
-            f"""
-            <div style="padding: 0.5rem;">
-                <span title="{tooltip}" style="cursor: help; border-bottom: 1px dotted #666;">
-                    {label} ℹ️
-                </span>
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
-        st.metric(label="", value=value, delta=delta)
 
 # ==============================================================================
 # ENCABEZADO PRINCIPAL
@@ -115,7 +96,7 @@ if modo_analisis == "🔍 Activo Único":
                 # Extraer datos usando nuestro módulo
                 datos = obtener_datos_financieros(ticker_input)
                 
-                if datos and datos['precio'] > 0:
+                if datos and datos.get('precio', 0) > 0:
                     st.session_state.datos_cache = datos
                     st.session_state.error = None
                 else:
@@ -136,7 +117,7 @@ if modo_analisis == "🔍 Activo Único":
         # Mostrar aviso si son datos de ejemplo
         if datos.get('es_mock', False):
             st.warning("""
-            ⚠️ **Modo Demostración**: Yahoo Finance está temporalmente bloqueado. 
+            ️ **Modo Demostración**: Yahoo Finance está temporalmente bloqueado. 
             Mostrando datos de ejemplo para demostración. Los datos reales se cargarán automáticamente cuando la API esté disponible.
             """)
         
@@ -144,36 +125,39 @@ if modo_analisis == "🔍 Activo Único":
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
+            market_cap_text = f"${datos['market_cap']/1e9:.1f}B" if datos.get('market_cap', 0) else "N/A"
             st.metric(
-                label=" Precio Actual",
+                label="💰 Precio Actual",
                 value=f"${datos['precio']:.2f}",
-                delta=f"Market Cap: ${datos['market_cap']/1e9:.1f}B" if datos['market_cap'] else "N/A",
+                delta=market_cap_text,
                 help="Precio de mercado en tiempo real"
             )
         
         with col2:
-            roic_delta = "Excelente" if datos['roic'] > 15 else "Bueno" if datos['roic'] > 10 else "Regular"
+            roic_delta = "Excelente" if datos.get('roic', 0) > 15 else "Bueno" if datos.get('roic', 0) > 10 else "Regular"
             st.metric(
                 label="📊 ROIC",
-                value=f"{datos['roic']:.1f}%",
+                value=f"{datos.get('roic', 0):.1f}%",
                 delta=roic_delta,
                 help="Return on Invested Capital - Eficiencia del negocio. >15% es excelente"
             )
         
         with col3:
-            deuda_status = "✅ Sólido" if datos['deuda_ebitda'] < 2 else "️ Moderado" if datos['deuda_ebitda'] < 4 else "🔴 Alto"
+            deuda_val = datos.get('deuda_ebitda', 0)
+            deuda_status = "✅ Sólido" if deuda_val < 2 else "⚠️ Moderado" if deuda_val < 4 else "🔴 Alto"
             st.metric(
-                label=" Deuda/EBITDA",
-                value=f"{datos['deuda_ebitda']:.2f}x",
+                label="📉 Deuda/EBITDA",
+                value=f"{deuda_val:.2f}x",
                 delta=deuda_status,
                 help="Ratio de solvencia - Capacidad de pago de deuda. <2x es sólido"
             )
         
         with col4:
-            margen_status = "🟢 Atractivo" if datos['margen_seguridad'] > 20 else "⚪ Justo" if datos['margen_seguridad'] > 0 else "🔴 Sobrevalorado"
+            margen_val = datos.get('margen_seguridad', 0)
+            margen_status = " Atractivo" if margen_val > 20 else "⚪ Justo" if margen_val > 0 else "🔴 Sobrevalorado"
             st.metric(
-                label="🎯 Margen de Seguridad",
-                value=f"{datos['margen_seguridad']:.1f}%",
+                label=" Margen de Seguridad",
+                value=f"{margen_val:.1f}%",
                 delta=margen_status,
                 help="Diferencia entre valor intrínseco (DCF) y precio de mercado"
             )
@@ -186,21 +170,22 @@ if modo_analisis == "🔍 Activo Único":
         
         with col_a:
             st.markdown("### 💵 Flujo de Caja Libre")
-            st.metric("FCF (Anual)", f"${datos['fcf']:.2f}B")
+            st.metric("FCF (Anual)", f"${datos.get('fcf', 0):.2f}B")
             st.caption("Free Cash Flow - Dinero real que genera la empresa")
         
         with col_b:
             st.markdown("### 📄 Utilidad Neta")
-            st.metric("Net Income", f"${datos['net_income']/1e9:.2f}B")
+            net_income_billones = datos.get('net_income', 0) / 1e9
+            st.metric("Net Income", f"${net_income_billones:.2f}B")
             st.caption("Beneficio contable después de impuestos")
         
         # Veredicto estilo Buffett
         st.divider()
         st.subheader("🎯 Veredicto del Agente")
         
-        roic_ok = datos['roic'] > 15
-        deuda_ok = datos['deuda_ebitda'] < 2.0
-        margen_ok = datos['margen_seguridad'] > 0
+        roic_ok = datos.get('roic', 0) > 15
+        deuda_ok = datos.get('deuda_ebitda', 99) < 2.0
+        margen_ok = datos.get('margen_seguridad', 0) > 0
         
         if roic_ok and deuda_ok and margen_ok:
             st.success("""
@@ -243,7 +228,7 @@ if modo_analisis == "🔍 Activo Único":
     else:
         # Estado inicial (sin datos)
         st.markdown("""
-        ###  Ingresa un ticker y haz clic en "Analizar Ahora"
+        ### 👈 Ingresa un ticker y haz clic en "Analizar Ahora"
         
         La aplicación extraerá:
         - Precio actual y capitalización de mercado
@@ -255,7 +240,7 @@ if modo_analisis == "🔍 Activo Único":
 
 else:  # Modo Portafolio
     tickers = [t.strip() for t in ticker_input.split(",") if t.strip()]
-    st.info(f"💼 Analizando portafolio de **{len(tickers)} activos**: {', '.join(tickers)}")
+    st.info(f" Analizando portafolio de **{len(tickers)} activos**: {', '.join(tickers)}")
     
     if ejecutar_analisis:
         with st.spinner("📊 Extrayendo datos de todos los activos..."):
@@ -289,10 +274,11 @@ else:  # Modo Portafolio
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.9em;'>
-    <p>QuantBuffett AI v0.2.1 | Desarrollado con Streamlit + Python + yfinance</p>
+    <p>QuantBuffett AI v0.2.2 | Desarrollado con Streamlit + Python + yfinance</p>
     <p><em>"Es mucho mejor comprar una empresa maravillosa a un precio justo, 
     que una empresa justa a un precio maravilloso." - Warren Buffett</em></p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
