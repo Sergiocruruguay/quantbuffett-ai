@@ -1,19 +1,108 @@
 """
 QuantBuffett AI - Plataforma de Análisis Financiero Profesional
-Autor: [Tu Nombre]
-Versión: 0.2.2 (Versión simplificada y robusta)
+Versión: 0.3.0 (Auto-contenida - Sin dependencias externas)
 """
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import sys
-import os
 
-# Agregar src al path para importar módulos
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# ==============================================================================
+# BASE DE DATOS DE EJEMPLO (Datos realistas)
+# ==============================================================================
+MOCK_DATABASE = {
+    'AAPL': {
+        'ticker': 'AAPL',
+        'precio': 308.50,
+        'market_cap': 2400000000000,
+        'roic': 55.2,
+        'deuda_ebitda': 0.35,
+        'fcf': 105.8,
+        'net_income': 112000000000,
+        'ebit': 130000000000,
+        'margen_seguridad': -4.3,
+        'beta': 1.10,
+        'sector': 'Technology',
+        'industry': 'Consumer Electronics'
+    },
+    'MSFT': {
+        'ticker': 'MSFT',
+        'precio': 415.20,
+        'market_cap': 3100000000000,
+        'roic': 38.1,
+        'deuda_ebitda': 0.42,
+        'fcf': 78.5,
+        'net_income': 88000000000,
+        'ebit': 105000000000,
+        'margen_seguridad': 3.5,
+        'beta': 0.95,
+        'sector': 'Technology',
+        'industry': 'Software'
+    },
+    'KO': {
+        'ticker': 'KO',
+        'precio': 62.30,
+        'market_cap': 270000000000,
+        'roic': 16.6,
+        'deuda_ebitda': 1.50,
+        'fcf': 9.8,
+        'net_income': 10500000000,
+        'ebit': 13000000000,
+        'margen_seguridad': 12.5,
+        'beta': 0.65,
+        'sector': 'Consumer Defensive',
+        'industry': 'Beverages'
+    },
+    'GOOGL': {
+        'ticker': 'GOOGL',
+        'precio': 175.80,
+        'market_cap': 2200000000000,
+        'roic': 26.4,
+        'deuda_ebitda': 0.28,
+        'fcf': 65.2,
+        'net_income': 75000000000,
+        'ebit': 95000000000,
+        'margen_seguridad': 8.2,
+        'beta': 1.05,
+        'sector': 'Communication Services',
+        'industry': 'Internet Content'
+    },
+    'WMT': {
+        'ticker': 'WMT',
+        'precio': 85.40,
+        'market_cap': 230000000000,
+        'roic': 14.2,
+        'deuda_ebitda': 1.85,
+        'fcf': 12.5,
+        'net_income': 15000000000,
+        'ebit': 22000000000,
+        'margen_seguridad': 5.8,
+        'beta': 0.55,
+        'sector': 'Consumer Defensive',
+        'industry': 'Discount Stores'
+    },
+    'TSLA': {
+        'ticker': 'TSLA',
+        'precio': 245.60,
+        'market_cap': 780000000000,
+        'roic': 12.8,
+        'deuda_ebitda': 0.95,
+        'fcf': 8.2,
+        'net_income': 12000000000,
+        'ebit': 15000000000,
+        'margen_seguridad': -15.2,
+        'beta': 2.05,
+        'sector': 'Consumer Cyclical',
+        'industry': 'Auto Manufacturers'
+    }
+}
 
-from src.data_fetcher import obtener_datos_financieros
+def obtener_datos_financieros(ticker: str):
+    """Obtiene datos financieros del ticker."""
+    ticker_upper = ticker.upper()
+    if ticker_upper in MOCK_DATABASE:
+        return MOCK_DATABASE[ticker_upper].copy()
+    return None
 
 # ==============================================================================
 # CONFIGURACIÓN DE LA PÁGINA
@@ -80,6 +169,8 @@ Esta aplicación combina:
 - ✅ Optimización de portafolios (Markowitz)
 - ✅ Pronóstico con Machine Learning (Prophet)
 - ✅ Análisis de riesgos con IA (NLP)
+
+**Modo Demostración:** Mostrando datos de ejemplo.
 """)
 
 # ==============================================================================
@@ -91,9 +182,8 @@ if modo_analisis == "🔍 Activo Único":
     st.info(f"🎯 Analizando: **{ticker_input}**")
     
     if ejecutar_analisis or 'datos_cache' not in st.session_state:
-        with st.spinner(f"📊 Extrayendo datos financieros de {ticker_input}..."):
+        with st.spinner(f" Extrayendo datos financieros de {ticker_input}..."):
             try:
-                # Extraer datos usando nuestro módulo
                 datos = obtener_datos_financieros(ticker_input)
                 
                 if datos and datos.get('precio', 0) > 0:
@@ -110,16 +200,15 @@ if modo_analisis == "🔍 Activo Único":
     # Mostrar resultados o error
     if st.session_state.error:
         st.error(st.session_state.error)
-        st.info("💡 Consejo: Verifica que el ticker sea correcto (ej: AAPL, MSFT, GOOGL)")
+        st.info("💡 Consejo: Tickers disponibles: AAPL, MSFT, KO, GOOGL, WMT, TSLA")
     elif st.session_state.datos_cache:
         datos = st.session_state.datos_cache
         
-        # Mostrar aviso si son datos de ejemplo
-        if datos.get('es_mock', False):
-            st.warning("""
-            ️ **Modo Demostración**: Yahoo Finance está temporalmente bloqueado. 
-            Mostrando datos de ejemplo para demostración. Los datos reales se cargarán automáticamente cuando la API esté disponible.
-            """)
+        # Mostrar aviso de modo demostración
+        st.warning("""
+        ️ **Modo Demostración**: Mostrando datos de ejemplo para desarrollo. 
+        Los datos reales de Yahoo Finance se integrarán en la próxima versión.
+        """)
         
         # Métricas principales
         col1, col2, col3, col4 = st.columns(4)
@@ -134,17 +223,18 @@ if modo_analisis == "🔍 Activo Único":
             )
         
         with col2:
-            roic_delta = "Excelente" if datos.get('roic', 0) > 15 else "Bueno" if datos.get('roic', 0) > 10 else "Regular"
+            roic_val = datos.get('roic', 0)
+            roic_delta = "Excelente" if roic_val > 15 else "Bueno" if roic_val > 10 else "Regular"
             st.metric(
-                label="📊 ROIC",
-                value=f"{datos.get('roic', 0):.1f}%",
+                label=" ROIC",
+                value=f"{roic_val:.1f}%",
                 delta=roic_delta,
                 help="Return on Invested Capital - Eficiencia del negocio. >15% es excelente"
             )
         
         with col3:
             deuda_val = datos.get('deuda_ebitda', 0)
-            deuda_status = "✅ Sólido" if deuda_val < 2 else "⚠️ Moderado" if deuda_val < 4 else "🔴 Alto"
+            deuda_status = "✅ Sólido" if deuda_val < 2 else "️ Moderado" if deuda_val < 4 else "🔴 Alto"
             st.metric(
                 label="📉 Deuda/EBITDA",
                 value=f"{deuda_val:.2f}x",
@@ -154,9 +244,9 @@ if modo_analisis == "🔍 Activo Único":
         
         with col4:
             margen_val = datos.get('margen_seguridad', 0)
-            margen_status = " Atractivo" if margen_val > 20 else "⚪ Justo" if margen_val > 0 else "🔴 Sobrevalorado"
+            margen_status = "🟢 Atractivo" if margen_val > 20 else "⚪ Justo" if margen_val > 0 else "🔴 Sobrevalorado"
             st.metric(
-                label=" Margen de Seguridad",
+                label="🎯 Margen de Seguridad",
                 value=f"{margen_val:.1f}%",
                 delta=margen_status,
                 help="Diferencia entre valor intrínseco (DCF) y precio de mercado"
@@ -164,7 +254,7 @@ if modo_analisis == "🔍 Activo Único":
         
         # Análisis detallado
         st.divider()
-        st.subheader("📈 Análisis Detallado")
+        st.subheader(" Análisis Detallado")
         
         col_a, col_b = st.columns(2)
         
@@ -230,7 +320,9 @@ if modo_analisis == "🔍 Activo Único":
         st.markdown("""
         ### 👈 Ingresa un ticker y haz clic en "Analizar Ahora"
         
-        La aplicación extraerá:
+        **Tickers disponibles:** AAPL, MSFT, KO, GOOGL, WMT, TSLA
+        
+        La aplicación mostrará:
         - Precio actual y capitalización de mercado
         - ROIC (eficiencia del negocio)
         - Ratio Deuda/EBITDA (solvencia)
@@ -274,11 +366,12 @@ else:  # Modo Portafolio
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.9em;'>
-    <p>QuantBuffett AI v0.2.2 | Desarrollado con Streamlit + Python + yfinance</p>
+    <p>QuantBuffett AI v0.3.0 | Desarrollado con Streamlit + Python</p>
     <p><em>"Es mucho mejor comprar una empresa maravillosa a un precio justo, 
     que una empresa justa a un precio maravilloso." - Warren Buffett</em></p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
 
