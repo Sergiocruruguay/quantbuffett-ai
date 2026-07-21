@@ -1,6 +1,6 @@
 """
 QuantBuffett AI - Plataforma Profesional de Análisis Financiero
-Versión: 1.0.0-beta | Paso 6B: Portafolio Completo con Markowitz
+Versión: 1.0.0-rc1 | Datos reales prioritarios + Mock como respaldo
 """
 
 import streamlit as st
@@ -27,7 +27,7 @@ st.set_page_config(
 ALPHA_VANTAGE_KEY = st.secrets.get("ALPHA_VANTAGE_KEY", "5IPGMO6N5R7UB9VC")
 
 # ==============================================================================
-# BASE DE DATOS MOCK (Fallback)
+# DATOS MOCK - SOLO COMO RESPALDO (Fallback)
 # ==============================================================================
 MOCK_DATABASE = {
     'AAPL': {
@@ -87,23 +87,31 @@ MOCK_DATABASE = {
 }
 
 # ==============================================================================
-# FUNCIONES DE ALPHA VANTAGE
+# FUNCIÓN PRINCIPAL: OBTENER DATOS REALES (Prioridad Alpha Vantage)
 # ==============================================================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def obtener_datos_alpha_vantage(ticker: str) -> dict:
-    """Obtiene datos fundamentales de Alpha Vantage."""
+    """
+    Obtiene datos REALES de Alpha Vantage.
+    Retorna None si falla o hay rate limit.
+    """
     try:
+        # 1. OVERVIEW (datos fundamentales)
         url_overview = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={ticker}&apikey={ALPHA_VANTAGE_KEY}"
         resp_overview = requests.get(url_overview, timeout=10)
         data_overview = resp_overview.json()
         
+        # Verificar rate limit o error
         if "Note" in data_overview or "Information" in data_overview:
             return None
         
         if not data_overview.get("Symbol"):
             return None
         
-        time.sleep(0.5)
+        # Respetar rate limit (5 calls/min en plan gratuito)
+        time.sleep(12)
+        
+        # 2. GLOBAL_QUOTE (precio actual en tiempo real)
         url_quote = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={ticker}&apikey={ALPHA_VANTAGE_KEY}"
         resp_quote = requests.get(url_quote, timeout=10)
         data_quote = resp_quote.json()
@@ -111,47 +119,69 @@ def obtener_datos_alpha_vantage(ticker: str) -> dict:
         quote = data_quote.get("Global Quote", {})
         precio_actual = float(quote.get("05. price", 0)) if quote.get("05. price") else 0
         
+        # Si no hay precio en quote, usar el del overview
+        if precio_actual == 0:
+            precio_actual = float(data_overview.get('Price', 0))
+        
+        # 3. Construir diccionario con datos REALES
         resultado = {
             'ticker': ticker.upper(),
-            'precio': precio_actual if precio_actual > 0 else float(data_overview.get('Price', 0)),
-            'market_cap': float(data_overview.get('MarketCapitalization', 0)),
+            'precio': precio_actual,
+            'market_cap': float(data_overview.get('MarketCapitalization', 0)) if data_overview.get('MarketCapitalization') else 0,
             'pe_ratio': float(data_overview.get('PERatio', 0)) if data_overview.get('PERatio') else 0,
             'eps': float(data_overview.get('EPS', 0)) if data_overview.get('EPS') else 0,
             'dividend_yield': float(data_overview.get('DividendYield', 0)) if data_overview.get('DividendYield') else 0,
             'beta': float(data_overview.get('Beta', 1.0)) if data_overview.get('Beta') else 1.0,
             'sector': data_overview.get('Sector', 'N/A'),
             'industry': data_overview.get('Industry', 'N/A'),
+            'descripcion': data_overview.get('Description', '')[:300],
             'roic': float(data_overview.get('ReturnOnEquityTTM', 0)) * 100 if data_overview.get('ReturnOnEquityTTM') else 0,
-            'net_income': float(data_overview.get('NetIncomeTTM', 0)),
-            'retorno_anual': 0,
-            'volatilidad_anual': 0,
-            'es_real': True
+            'profit_margin': float(data_overview.get('ProfitMargin', 0)) * 100 if data_overview.get('ProfitMargin') else 0,
+            'operating_margin': float(data_overview.get('OperatingMarginTTM', 0)) * 100 if data_overview.get('OperatingMarginTTM') else 0,
+            'revenue_ttm': float(data_overview.get('RevenueTTM', 0)) if data_overview.get('RevenueTTM') else 0,
+            'net_income': float(data_overview.get('NetIncomeTTM', 0)) if data_overview.get('NetIncomeTTM') else 0,
+            'es_real': True,
+            'fuente': 'Alpha Vantage (Datos Reales)'
         }
+        
+        # Campos que Alpha Vantage no proporciona directamente - estimar o usar mock
+        mock = MOCK_DATABASE.get(ticker.upper(), {})
+        resultado['deuda_ebitda'] = mock.get('deuda_ebitda', 1.0)
+        resultado['fcf'] = mock.get('fcf', 0)
+        resultado['margen_seguridad'] = mock.get('margen_seguridad', 0)
+        resultado['ebit'] = mock.get('ebit', 0)
+        
+        # Estimación de retorno y volatilidad basada en beta
+        beta = resultado['beta']
+        resultado['retorno_anual'] = 0.08 + (beta * 0.12)  # CAPM simplificado
+        resultado['volatilidad_anual'] = 0.15 + (beta * 0.15)
+        resultado['tendencia'] = 'Alcista' if resultado['retorno_anual'] > 0.10 else 'Bajista'
         
         return resultado
         
     except Exception as e:
+        st.warning(f"⚠️ Error al conectar con Alpha Vantage: {str(e)[:50]}")
         return None
 
 
 def obtener_datos_financieros(ticker: str) -> dict:
-    """Obtiene datos financieros con fallback a mock."""
+    """
+    Obtiene datos financieros.
+    PRIORIDAD: 1) Alpha Vantage (real) → 2) Mock (respaldo)
+    """
     ticker_upper = ticker.upper()
+    
+    # INTENTAR DATOS REALES PRIMERO
     datos_reales = obtener_datos_alpha_vantage(ticker_upper)
     
     if datos_reales and datos_reales.get('precio', 0) > 0:
-        mock = MOCK_DATABASE.get(ticker_upper, {})
-        datos_reales['deuda_ebitda'] = mock.get('deuda_ebitda', 1.0)
-        datos_reales['fcf'] = mock.get('fcf', 0)
-        datos_reales['margen_seguridad'] = mock.get('margen_seguridad', 0)
-        datos_reales['retorno_anual'] = mock.get('retorno_anual', 0.10)
-        datos_reales['volatilidad_anual'] = mock.get('volatilidad_anual', 0.20)
-        datos_reales['tendencia'] = mock.get('tendencia', 'N/A')
         return datos_reales
     
+    # FALLBACK A MOCK (solo si Alpha Vantage falla)
     if ticker_upper in MOCK_DATABASE:
         datos = MOCK_DATABASE[ticker_upper].copy()
         datos['es_real'] = False
+        datos['fuente'] = 'Base de datos de demostración (Alpha Vantage no disponible)'
         return datos
     
     return None
@@ -160,22 +190,11 @@ def obtener_datos_financieros(ticker: str) -> dict:
 # FUNCIONES DE PORTAFOLIO (MARKOWITZ)
 # ==============================================================================
 def optimizar_portafolio(tickers: list, rf: float = 0.04, modo: str = "simple") -> dict:
-    """
-    Optimiza portafolio usando teoría de Markowitz.
-    
-    Args:
-        tickers: Lista de tickers
-        rf: Tasa libre de riesgo
-        modo: "simple" o "avanzado"
-    
-    Returns:
-        Diccionario con resultados de optimización
-    """
+    """Optimiza portafolio usando teoría de Markowitz."""
     n = len(tickers)
-    retornos = np.array([MOCK_DATABASE[t]['retorno_anual'] for t in tickers])
-    volatilidades = np.array([MOCK_DATABASE[t]['volatilidad_anual'] for t in tickers])
+    retornos = np.array([MOCK_DATABASE.get(t, {}).get('retorno_anual', 0.12) for t in tickers])
+    volatilidades = np.array([MOCK_DATABASE.get(t, {}).get('volatilidad_anual', 0.25) for t in tickers])
     
-    # Matriz de correlación (simplificada para demo)
     correlacion = np.eye(n)
     for i in range(n):
         for j in range(i+1, n):
@@ -192,10 +211,8 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04, modo: str = "simple") 
     restricciones = {'type': 'eq', 'fun': lambda x: np.sum(x) - 1.0}
     
     if modo == "avanzado":
-        # En modo avanzado, permitir pesos entre 0% y 40% por activo
         limites = tuple((0.0, 0.40) for _ in range(n))
     else:
-        # En modo simple, sin restricciones adicionales
         limites = tuple((0.0, 1.0) for _ in range(n))
     
     pesos_iniciales = np.ones(n) / n
@@ -207,7 +224,6 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04, modo: str = "simple") 
     volatilidad_optima = np.sqrt(np.dot(pesos_optimos.T, np.dot(cov_matrix, pesos_optimos)))
     sharpe_optimo = (retorno_optimo - rf) / volatilidad_optima
     
-    # Generar frontera eficiente (Montecarlo)
     mc_retornos = []
     mc_vols = []
     mc_sharpes = []
@@ -222,7 +238,6 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04, modo: str = "simple") 
         mc_vols.append(v * 100)
         mc_sharpes.append(s)
     
-    # Calcular métricas adicionales para modo avanzado
     matriz_correlacion = correlacion if modo == "avanzado" else None
     
     return {
@@ -264,7 +279,7 @@ st.markdown("""
 # ==============================================================================
 # BARRA LATERAL
 # ==============================================================================
-st.sidebar.header("️ Configuración")
+st.sidebar.header("⚙️ Configuración")
 
 modo_usuario = st.sidebar.radio(
     "Modo de Visualización",
@@ -278,6 +293,7 @@ st.sidebar.markdown("###  Fuente de Datos")
 if ALPHA_VANTAGE_KEY and ALPHA_VANTAGE_KEY != "DEMO_KEY":
     st.sidebar.success("✅ Alpha Vantage conectado")
     st.sidebar.caption("500 llamadas/día disponibles")
+    st.sidebar.caption("️ Rate limit: 5 calls/min")
 else:
     st.sidebar.warning("⚠️ Modo Demo (datos simulados)")
 
@@ -285,7 +301,7 @@ st.sidebar.divider()
 
 st.sidebar.markdown("""
 ### ℹ️ Sobre QuantBuffett AI
-Versión 1.0.0-beta  
+Versión 1.0.0-rc1  
 Desarrollado con Streamlit + Python  
 
 *"Es mejor comprar una empresa maravillosa a un precio justo, que una empresa justa a un precio maravilloso."*  
@@ -299,7 +315,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "🏠 Dashboard",
     "🔍 Análisis de Activo",
     "💼 Portafolio",
-    "🔮 Pronóstico y Riesgos"
+    " Pronóstico y Riesgos"
 ])
 
 # ==============================================================================
@@ -319,14 +335,14 @@ with tab1:
         2. Ve a la pestaña **💼 Portafolio** para optimizar tu diversificación
         3. Ve a la pestaña **🔮 Pronóstico y Riesgos** para ver proyecciones
         
-        **Empresas disponibles:** AAPL, MSFT, KO, GOOGL, WMT, TSLA
+        **Empresas de ejemplo:** AAPL, MSFT, KO, GOOGL, WMT, TSLA
         """)
         
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("S&P 500 (simulado)", "5,420", "+0.8%")
         with col2:
-            st.metric("Empresas analizables", "6", "AAPL, MSFT, KO...")
+            st.metric("Empresas analizables", "∞", "Cualquier ticker")
         with col3:
             st.metric("Llamadas API restantes", "~495", "de 500 diarias")
     
@@ -340,9 +356,9 @@ with tab1:
         with col2:
             st.metric("Modo Activo", "Avanzado", "Parámetros editables")
         with col3:
-            st.metric("Empresas en DB", "6", "Mock + Real")
+            st.metric("Empresas en DB", "6+", "Mock + Real")
         with col4:
-            st.metric("Versión", "1.0.0-beta", "Paso 6B")
+            st.metric("Versión", "1.0.0-rc1", "Paso 6B+")
         
         st.divider()
         st.info("💡 **Tip:** Usa la pestaña 'Portafolio' para optimizar tu diversificación con el modelo de Markowitz.")
@@ -366,25 +382,39 @@ with tab2:
     if 'datos_activo' in st.session_state:
         datos = st.session_state.datos_activo
         
+        # Indicador de fuente de datos
         if datos.get('es_real'):
-            st.success("✅ Datos reales de Alpha Vantage")
+            st.success(f"✅ Datos REALES de {datos.get('fuente', 'Alpha Vantage')}")
         else:
-            st.warning("⚠️ Datos de demostración")
+            st.warning(f"⚠️ {datos.get('fuente', 'Datos de demostración')}")
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Precio", f"${datos['precio']:.2f}")
+            st.metric("💰 Precio", f"${datos['precio']:.2f}")
         with col2:
-            st.metric("P/E", f"{datos.get('pe_ratio', 0):.1f}x")
+            st.metric("📈 P/E", f"{datos.get('pe_ratio', 0):.1f}x")
         with col3:
-            st.metric("ROIC", f"{datos.get('roic', 0):.1f}%")
+            st.metric("📊 ROE", f"{datos.get('roic', 0):.1f}%")
         with col4:
-            st.metric("Beta", f"{datos.get('beta', 1):.2f}")
+            st.metric("🎯 Beta", f"{datos.get('beta', 1):.2f}")
         
-        st.info("📊 Análisis detallado disponible en versiones futuras.")
+        st.divider()
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("💵 EPS", f"${datos.get('eps', 0):.2f}")
+            st.metric(" Sector", datos.get('sector', 'N/A'))
+        with col2:
+            st.metric(" Market Cap", f"${datos.get('market_cap', 0)/1e9:.1f}B")
+            st.metric("🏢 Industria", datos.get('industry', 'N/A'))
+        
+        if datos.get('descripcion'):
+            st.divider()
+            st.subheader("🏢 Descripción de la Empresa")
+            st.write(datos['descripcion'])
 
 # ==============================================================================
-# PESTAÑA 3: PORTAFOLIO (NUEVA - PASO 6B)
+# PESTAÑA 3: PORTAFOLIO
 # ==============================================================================
 with tab3:
     st.header("💼 Optimizador de Portafolio")
@@ -392,42 +422,62 @@ with tab3:
     # ==================================================================
     # MODO SIMPLE
     # ==================================================================
-    if modo_usuario == " Simple (Principiantes)":
+    if modo_usuario == "🟢 Simple (Principiantes)":
         st.markdown("""
         ### 🎯 Optimización Inteligente de Portafolio
         
-        Selecciona las empresas en las que quieres invertir y te diremos exactamente cómo distribuir tu dinero para maximizar ganancias minimizando riesgos.
+        Selecciona las empresas en las que quieres invertir y te diremos exactamente cómo distribuir tu dinero.
         """)
         
         st.divider()
         
-        # Selección de activos
-        st.subheader("1️ Selecciona tus empresas")
-        tickers_disponibles = list(MOCK_DATABASE.keys())
+        st.subheader("1️⃣ Selecciona tus empresas")
+        
+        tickers_recomendados = ['AAPL', 'MSFT', 'KO', 'GOOGL', 'WMT', 'TSLA']
         tickers_seleccionados = st.multiselect(
             "Elige entre 2 y 6 empresas",
-            options=tickers_disponibles,
+            options=tickers_recomendados,
             default=['AAPL', 'MSFT', 'KO'],
             help="Selecciona al menos 2 empresas para diversificar"
         )
         
+        st.divider()
+        
+        st.markdown("**¿Quieres agregar otra empresa?**")
+        ticker_personalizado = st.text_input(
+            "Ingresa el ticker (ej: AMZN, NVDA, JPM)",
+            placeholder="AMZN",
+            help="Ingresa el símbolo bursátil de cualquier empresa"
+        ).upper()
+        
+        if ticker_personalizado and ticker_personalizado not in tickers_seleccionados:
+            if st.button(f"➕ Agregar {ticker_personalizado}"):
+                with st.spinner(f"Obteniendo datos REALES de {ticker_personalizado}..."):
+                    datos_nuevo = obtener_datos_financieros(ticker_personalizado)
+                    
+                    if datos_nuevo:
+                        # Agregar a MOCK_DATABASE temporalmente para el portafolio
+                        MOCK_DATABASE[ticker_personalizado] = datos_nuevo
+                        tickers_seleccionados.append(ticker_personalizado)
+                        st.success(f"✅ {ticker_personalizado} agregado con datos reales")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ No se encontraron datos para {ticker_personalizado}. Verifica el ticker.")
+        
         if len(tickers_seleccionados) < 2:
             st.warning("⚠️ Selecciona al menos 2 empresas para crear un portafolio diversificado.")
         else:
-            # Capital a invertir
             st.subheader("2️⃣ ¿Cuánto quieres invertir?")
             capital = st.slider("Capital total (USD)", 1000, 1000000, 10000, 1000)
             
             st.divider()
             
-            # Botón de optimización
             if st.button("🚀 Optimizar Mi Portafolio", type="primary", use_container_width=True):
                 with st.spinner("Calculando la mejor distribución..."):
                     opt_result = optimizar_portafolio(tickers_seleccionados, rf=0.04, modo="simple")
                     st.session_state.opt_result = opt_result
                     st.session_state.capital = capital
             
-            # Mostrar resultados
             if 'opt_result' in st.session_state and st.session_state.opt_result['tickers'] == tickers_seleccionados:
                 opt = st.session_state.opt_result
                 capital = st.session_state.capital
@@ -435,10 +485,9 @@ with tab3:
                 st.divider()
                 st.subheader("3️⃣ Tu Portafolio Óptimo")
                 
-                # Métricas clave
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("📈 Retorno Anual Esperado", f"{opt['retorno']:.1f}%")
+                    st.metric(" Retorno Anual Esperado", f"{opt['retorno']:.1f}%")
                 with col2:
                     st.metric("⚠️ Riesgo (Volatilidad)", f"{opt['volatilidad']:.1f}%")
                 with col3:
@@ -446,7 +495,6 @@ with tab3:
                 
                 st.divider()
                 
-                # Gráfico de torta
                 st.subheader("🥧 Distribución Recomendada")
                 
                 df_pesos = pd.DataFrame({
@@ -467,45 +515,36 @@ with tab3:
                 
                 st.divider()
                 
-                # Tabla detallada
                 st.subheader("📋 Detalle de Inversión")
                 st.dataframe(df_pesos, use_container_width=True, hide_index=True)
                 
                 st.divider()
                 
-                # Interpretación simple
                 st.subheader("💡 ¿Qué significa esto?")
                 
                 if opt['sharpe'] > 1.0:
                     st.success(f"""
                     **Excelente portafolio!** Con un Ratio de Sharpe de {opt['sharpe']:.2f}, 
                     este portafolio ofrece muy buen retorno por cada unidad de riesgo asumido.
-                    
-                    **En términos simples:** Por cada 1% de riesgo que aceptas, esperas ganar {opt['sharpe']:.2f}% de retorno.
                     """)
                 elif opt['sharpe'] > 0.5:
                     st.info(f"""
                     **Buen portafolio.** Con un Ratio de Sharpe de {opt['sharpe']:.2f}, 
                     este portafolio ofrece un balance aceptable entre riesgo y retorno.
-                    
-                    **En términos simples:** Es una diversificación razonable para la mayoría de inversores.
                     """)
                 else:
                     st.warning(f"""
                     **Portafolio conservador.** Con un Ratio de Sharpe de {opt['sharpe']:.2f}, 
                     el retorno es moderado en relación al riesgo.
-                    
-                    **En términos simples:** Considera agregar empresas con mayor crecimiento potencial.
                     """)
                 
                 st.divider()
                 
-                # Perfil de riesgo
                 st.subheader("🎯 Perfil de Este Portafolio")
                 
                 if opt['volatilidad'] < 15:
                     st.markdown("""
-                    **Conservador** 🟢  
+                    **Conservador**   
                     Este portafolio está diseñado para proteger tu capital. Ideal si:
                     - Te preocupa perder dinero
                     - Prefieres estabilidad sobre crecimiento agresivo
@@ -513,7 +552,7 @@ with tab3:
                     """)
                 elif opt['volatilidad'] < 25:
                     st.markdown("""
-                    **Moderado** 🟡  
+                    **Moderado**   
                     Este portafolio balancea crecimiento y estabilidad. Ideal si:
                     - Buscas crecimiento pero con cierta protección
                     - Tu horizonte de inversión es mediano (3-7 años)
@@ -540,19 +579,68 @@ with tab3:
         
         st.divider()
         
-        # Selección de activos
         st.subheader("1. Selección de Activos")
-        tickers_disponibles = list(MOCK_DATABASE.keys())
+        
+        st.markdown("**Tickers base disponibles:**")
+        tickers_disponibles = ['AAPL', 'MSFT', 'KO', 'GOOGL', 'WMT', 'TSLA']
         tickers_seleccionados = st.multiselect(
-            "Selecciona activos (2-6)",
+            "Selecciona activos base (2-6)",
             options=tickers_disponibles,
             default=['AAPL', 'MSFT', 'KO', 'GOOGL']
         )
         
+        st.divider()
+        
+        st.markdown("**Agregar tickers personalizados (datos reales de Alpha Vantage):**")
+        
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            ticker_custom = st.text_input(
+                "Ticker personalizado",
+                placeholder="AMZN, NVDA, JPM, V, etc.",
+                help="Ingresa tickers separados por coma"
+            ).upper()
+        
+        with col2:
+            if st.button(" Agregar Tickers", use_container_width=True):
+                if ticker_custom:
+                    tickers_nuevos = [t.strip() for t in ticker_custom.split(',') if t.strip()]
+                    agregados = []
+                    errores = []
+                    
+                    for ticker in tickers_nuevos:
+                        if ticker not in MOCK_DATABASE:
+                            with st.spinner(f"Obteniendo datos reales de {ticker}..."):
+                                datos = obtener_datos_financieros(ticker)
+                                if datos:
+                                    # Asegurar que tenga todos los campos necesarios
+                                    if 'retorno_anual' not in datos or datos['retorno_anual'] == 0:
+                                        datos['retorno_anual'] = 0.12
+                                    if 'volatilidad_anual' not in datos or datos['volatilidad_anual'] == 0:
+                                        datos['volatilidad_anual'] = 0.25
+                                    
+                                    MOCK_DATABASE[ticker] = datos
+                                    agregados.append(ticker)
+                                else:
+                                    errores.append(ticker)
+                        
+                        if ticker not in tickers_seleccionados:
+                            tickers_seleccionados.append(ticker)
+                    
+                    if agregados:
+                        st.success(f"✅ Agregados: {', '.join(agregados)}")
+                    if errores:
+                        st.error(f"❌ No encontrados: {', '.join(errores)}")
+                    
+                    st.rerun()
+        
+        st.divider()
+        
         if len(tickers_seleccionados) < 2:
             st.warning("Se requieren al menos 2 activos.")
         else:
-            # Parámetros avanzados
+            st.markdown(f"**Portafolio actual:** {', '.join(tickers_seleccionados)}")
+            
             st.subheader("2. Parámetros del Modelo")
             
             col1, col2, col3 = st.columns(3)
@@ -568,7 +656,6 @@ with tab3:
             
             st.divider()
             
-            # Optimización
             if st.button("⚙️ Ejecutar Optimización", type="primary"):
                 with st.spinner("Optimizando portafolio..."):
                     opt_result = optimizar_portafolio(
@@ -576,13 +663,11 @@ with tab3:
                         rf=rf/100, 
                         modo="avanzado"
                     )
-                    # Ajustar pesos al máximo permitido
                     opt_result['pesos'] = np.minimum(opt_result['pesos'], max_peso/100)
-                    opt_result['pesos'] /= opt_result['pesos'].sum()  # Renormalizar
+                    opt_result['pesos'] /= opt_result['pesos'].sum()
                     
-                    # Recalcular métricas con pesos ajustados
-                    retornos = np.array([MOCK_DATABASE[t]['retorno_anual'] for t in tickers_seleccionados])
-                    volatilidades = np.array([MOCK_DATABASE[t]['volatilidad_anual'] for t in tickers_seleccionados])
+                    retornos = np.array([MOCK_DATABASE[t].get('retorno_anual', 0.12) for t in tickers_seleccionados])
+                    volatilidades = np.array([MOCK_DATABASE[t].get('volatilidad_anual', 0.25) for t in tickers_seleccionados])
                     correlacion = np.eye(len(tickers_seleccionados))
                     for i in range(len(tickers_seleccionados)):
                         for j in range(i+1, len(tickers_seleccionados)):
@@ -597,7 +682,6 @@ with tab3:
                     st.session_state.rf = rf
                     st.session_state.max_peso = max_peso
             
-            # Mostrar resultados
             if 'opt_result_avanzado' in st.session_state:
                 opt = st.session_state.opt_result_avanzado
                 rf = st.session_state.rf
@@ -605,7 +689,6 @@ with tab3:
                 st.divider()
                 st.subheader("3. Resultados de la Optimización")
                 
-                # Métricas
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric("Retorno Esperado", f"{opt['retorno']:.2f}%")
@@ -618,7 +701,6 @@ with tab3:
                 
                 st.divider()
                 
-                # Frontera Eficiente
                 st.subheader("4. Frontera Eficiente")
                 st.markdown("""
                 Cada punto representa un portafolio posible. La estrella roja indica el portafolio óptimo 
@@ -627,7 +709,6 @@ with tab3:
                 
                 fig_ef = go.Figure()
                 
-                # Nube de puntos Montecarlo
                 fig_ef.add_trace(go.Scatter(
                     x=opt['mc_data']['volatilidades'],
                     y=opt['mc_data']['retornos'],
@@ -642,7 +723,6 @@ with tab3:
                     name='Portafolios Aleatorios'
                 ))
                 
-                # Portafolio óptimo
                 fig_ef.add_trace(go.Scatter(
                     x=[opt['volatilidad']],
                     y=[opt['retorno']],
@@ -663,21 +743,19 @@ with tab3:
                 
                 st.divider()
                 
-                # Asignación óptima
                 st.subheader("5. Asignación Óptima de Pesos")
                 
                 df_pesos = pd.DataFrame({
                     'Activo': opt['tickers'],
                     'Peso Óptimo (%)': (opt['pesos'] * 100).round(2),
-                    'Retorno Individual (%)': [MOCK_DATABASE[t]['retorno_anual']*100 for t in opt['tickers']],
-                    'Volatilidad Individual (%)': [MOCK_DATABASE[t]['volatilidad_anual']*100 for t in opt['tickers']]
+                    'Retorno Individual (%)': [MOCK_DATABASE[t].get('retorno_anual', 0.12)*100 for t in opt['tickers']],
+                    'Volatilidad Individual (%)': [MOCK_DATABASE[t].get('volatilidad_anual', 0.25)*100 for t in opt['tickers']]
                 })
                 
                 st.dataframe(df_pesos, use_container_width=True, hide_index=True)
                 
                 st.divider()
                 
-                # Matriz de correlación
                 st.subheader("6. Matriz de Correlación")
                 st.markdown("Correlación entre los activos seleccionados (1.0 = correlación perfecta, 0.0 = sin correlación)")
                 
@@ -695,13 +773,11 @@ with tab3:
                 
                 st.divider()
                 
-                # Sistema de rebalanceo
                 st.subheader("7. Sistema de Rebalanceo Estratégico")
                 st.markdown("""
                 Compara tu portafolio actual con el óptimo para identificar ajustes necesarios.
                 """)
                 
-                # Input de portafolio actual
                 st.write("**Pesos actuales de tu portafolio (%):**")
                 pesos_actuales = {}
                 cols = st.columns(len(opt['tickers']))
@@ -717,12 +793,11 @@ with tab3:
                 
                 capital_rebalanceo = st.number_input("Capital total para rebalanceo (USD)", value=100000, step=10000)
                 
-                if st.button(" Calcular Rebalanceo"):
+                if st.button("🔄 Calcular Rebalanceo"):
                     df_rebalanceo = calcular_rebalanceo(pesos_actuales, opt, capital_rebalanceo)
                     
                     st.dataframe(df_rebalanceo, use_container_width=True, hide_index=True)
                     
-                    # Resumen de acciones
                     comprar = df_rebalanceo[df_rebalanceo['Accion'].str.contains('COMPRAR')]
                     vender = df_rebalanceo[df_rebalanceo['Accion'].str.contains('VENDER')]
                     
@@ -747,8 +822,9 @@ with tab4:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.85em;'>
-    <p><strong>QuantBuffett AI v1.0.0-beta</strong> | Paso 6B de 14</p>
-    <p>Datos: Alpha Vantage API + Base de datos de demostración</p>
+    <p><strong>QuantBuffett AI v1.0.0-rc1</strong> | Paso 6B+ de 14</p>
+    <p>Datos: Alpha Vantage API (Prioridad) + Base de datos de demostración (Respaldo)</p>
     <p><em>"La regla número 1 es no perder dinero. La regla número 2 es no olvidar la regla número 1."</em> — Warren Buffett</p>
 </div>
 """, unsafe_allow_html=True)
+
