@@ -993,37 +993,63 @@ with tab3:
                             st.error(f"**Vender:** {', '.join(vender['Activo'].tolist())}")
 
 # ==============================================================================
-# PESTAÑA 4: PRONÓSTICO Y RIESGOS (NUEVA - PASO 6C)
+# PESTAÑA 4: PRONÓSTICO Y RIESGOS (CORREGIDO)
 # ==============================================================================
 with tab4:
-    st.header("🔮 Pronóstico y Análisis de Riesgos")
+    st.header(" Pronóstico y Análisis de Riesgos")
     
-    # Input de ticker
-    ticker_pronostico = st.text_input("Ticker para pronóstico y análisis de riesgos", value="AAPL").upper()
+    # Input de ticker - FORZAR MAYÚSCULAS
+    ticker_input_raw = st.text_input("Ticker para pronóstico y análisis de riesgos", value="AAPL")
+    ticker_pronostico = ticker_input_raw.strip().upper()
     
-    if st.button("🔮 Analizar Pronóstico y Riesgos"):
-        with st.spinner("Ejecutando modelos de ML y análisis de riesgos..."):
-            datos = obtener_datos_financieros(ticker_pronostico)
-            if datos:
-                MOCK_DATABASE[ticker_pronostico] = datos
-                pronostico = pronosticar_precio(ticker_pronostico, dias_pronostico=90)
-                analisis_riesgos = analizar_riesgos_ia(ticker_pronostico)
-                st.session_state.pronostico = pronostico
-                st.session_state.riesgos = analisis_riesgos
-                st.session_state.error_pronostico = None
-            else:
+    # Botón de análisis
+    if st.button("🔮 Analizar Pronóstico y Riesgos", type="primary"):
+        with st.spinner(f"Ejecutando modelos para {ticker_pronostico}..."):
+            try:
+                # Obtener datos
+                datos = obtener_datos_financieros(ticker_pronostico)
+                
+                if datos and datos.get('precio', 0) > 0:
+                    # Agregar a MOCK_DATABASE si no existe
+                    if ticker_pronostico not in MOCK_DATABASE:
+                        MOCK_DATABASE[ticker_pronostico] = datos
+                    
+                    # Calcular pronóstico
+                    pronostico = pronosticar_precio(ticker_pronostico, dias_pronostico=90)
+                    
+                    # Calcular análisis de riesgos
+                    analisis_riesgos = analizar_riesgos_ia(ticker_pronostico)
+                    
+                    # Guardar en session_state
+                    st.session_state.pronostico = pronostico
+                    st.session_state.riesgos = analisis_riesgos
+                    st.session_state.ticker_analizado = ticker_pronostico
+                    st.session_state.error_pronostico = None
+                    
+                    st.success(f"✅ Análisis completado para {ticker_pronostico}")
+                else:
+                    st.session_state.pronostico = None
+                    st.session_state.riesgos = None
+                    st.session_state.error_pronostico = f"No se encontraron datos para {ticker_pronostico}. Verifica el ticker."
+                    
+            except Exception as e:
                 st.session_state.pronostico = None
                 st.session_state.riesgos = None
-                st.session_state.error_pronostico = f"No se encontraron datos para {ticker_pronostico}"
+                st.session_state.error_pronostico = f"Error en el análisis: {str(e)}"
     
+    # Mostrar error si existe
     if st.session_state.get('error_pronostico'):
         st.error(st.session_state.error_pronostico)
+        st.info("💡 Tickers disponibles: AAPL, MSFT, KO, GOOGL, WMT, TSLA")
+    
+    # Mostrar resultados si existen
     elif st.session_state.get('pronostico') and st.session_state.get('riesgos'):
         pron = st.session_state.pronostico
         riesgos = st.session_state.riesgos
+        ticker_analizado = st.session_state.get('ticker_analizado', ticker_pronostico)
         
         # Indicador de fuente
-        datos = MOCK_DATABASE.get(ticker_pronostico, {})
+        datos = MOCK_DATABASE.get(ticker_analizado, {})
         if datos.get('es_real'):
             st.success(f"✅ Datos REALES de {datos.get('fuente', 'Alpha Vantage')}")
         else:
@@ -1035,18 +1061,17 @@ with tab4:
         # MODO SIMPLE
         # ==================================================================
         if modo_usuario == "🟢 Simple (Principiantes)":
-            # Pronóstico simplificado
-            st.subheader(" Pronóstico de Precio a 90 Días")
+            st.subheader("📈 Pronóstico de Precio a 90 Días")
             
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("💰 Precio Actual", f"${pron['historico']['Precio'].iloc[-1]:.2f}")
             with col2:
                 cambio_30d = pron['cambio_30d']
-                st.metric(" Cambio 30 días", f"{cambio_30d:.1f}%", "↗️" if cambio_30d > 0 else "↘️")
+                st.metric("📊 Cambio 30 días", f"{cambio_30d:.1f}%", "↗️" if cambio_30d > 0 else "↘️")
             with col3:
                 cambio_pron = pron['cambio_pronostico']
-                st.metric(" Pronóstico 90 días", f"{cambio_pron:.1f}%", "↗️" if cambio_pron > 0 else "↘️")
+                st.metric("🔮 Pronóstico 90 días", f"{cambio_pron:.1f}%", "↗️" if cambio_pron > 0 else "↘️")
             
             st.divider()
             
@@ -1098,7 +1123,7 @@ with tab4:
             ))
             
             fig.update_layout(
-                title=f'Pronóstico de {ticker_pronostico} a 90 días',
+                title=f'Pronóstico de {ticker_analizado} a 90 días',
                 xaxis_title='Fecha',
                 yaxis_title='Precio (USD)',
                 hovermode='x unified',
@@ -1111,11 +1136,11 @@ with tab4:
             st.divider()
             
             # Veredicto simple
-            st.subheader(" Veredicto del Modelo")
+            st.subheader("🎯 Veredicto del Modelo")
             
             if pron['cambio_pronostico'] > 10:
                 st.success(f"""
-                ###  SEÑAL ALCISTA FUERTE
+                ### 🚀 SEÑAL ALCISTA FUERTE
                 El modelo predice un crecimiento del **{pron['cambio_pronostico']:.1f}%** en 90 días.
                 
                 **Recomendación:** Considerar posición larga con stop-loss en el límite inferior.
@@ -1145,7 +1170,7 @@ with tab4:
             st.divider()
             
             # Análisis de riesgos simplificado
-            st.subheader("️ Análisis de Riesgos")
+            st.subheader("🛡️ Análisis de Riesgos")
             
             st.markdown(f"""
             **Perfil de Riesgo:** {riesgos['perfil_riesgo']}  
@@ -1161,11 +1186,11 @@ with tab4:
             
             for i, riesgo in enumerate(riesgos_ordenados, 1):
                 if riesgo['nivel'] == 'Crítico':
-                    icono = ""
+                    icono = "🔴"
                 elif riesgo['nivel'] == 'Alto':
-                    icono = "🟠"
+                    icono = ""
                 elif riesgo['nivel'] == 'Moderado':
-                    icono = "🟡"
+                    icono = ""
                 else:
                     icono = "🟢"
                 
@@ -1179,12 +1204,11 @@ with tab4:
         # MODO AVANZADO
         # ==================================================================
         else:
-            # Pronóstico detallado
             st.subheader("📈 Pronóstico de Precio con Bandas de Confianza (95%)")
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric(" Precio Actual", f"${pron['historico']['Precio'].iloc[-1]:.2f}")
+                st.metric("💰 Precio Actual", f"${pron['historico']['Precio'].iloc[-1]:.2f}")
             with col2:
                 cambio_30d = pron['cambio_30d']
                 st.metric("📊 Cambio 30 días", f"{cambio_30d:.1f}%", "↗️" if cambio_30d > 0 else "↘️")
@@ -1192,7 +1216,7 @@ with tab4:
                 cambio_pron = pron['cambio_pronostico']
                 st.metric("🔮 Pronóstico 90 días", f"{cambio_pron:.1f}%", "↗️" if cambio_pron > 0 else "↘️")
             with col4:
-                st.metric(" Volatilidad Diaria", f"{pron['volatilidad_diaria']:.2f}%")
+                st.metric("⚠️ Volatilidad Diaria", f"{pron['volatilidad_diaria']:.2f}%")
             
             st.divider()
             
@@ -1244,7 +1268,7 @@ with tab4:
             ))
             
             fig.update_layout(
-                title=f'Pronóstico de {ticker_pronostico} - Modelo de Regresión Lineal',
+                title=f'Pronóstico de {ticker_analizado} - Modelo de Regresión Lineal',
                 xaxis_title='Fecha',
                 yaxis_title='Precio (USD)',
                 hovermode='x unified',
@@ -1257,7 +1281,7 @@ with tab4:
             st.divider()
             
             # Análisis de tendencia
-            st.subheader("📊 Análisis de Tendencia")
+            st.subheader(" Análisis de Tendencia")
             
             col1, col2 = st.columns(2)
             
@@ -1291,11 +1315,9 @@ with tab4:
             # Análisis de riesgos detallado
             st.subheader("🛡️ Análisis de Riesgos Consolidado")
             
-            # Score de riesgo principal
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                # Gauge chart para score de riesgo
                 fig_gauge = go.Figure(go.Indicator(
                     mode="gauge+number+delta",
                     value=riesgos['score_riesgo'],
@@ -1335,14 +1357,14 @@ with tab4:
                 **Interpretación del Score:**
                 - 🟢 **0-30**: Bajo riesgo - Perfil conservador
                 - 🟡 **30-50**: Riesgo moderado - Balance adecuado
-                -  **50-70**: Riesgo moderado-alto - Requiere diversificación
-                -  **70-100**: Alto riesgo - Solo inversores agresivos
+                - 🟠 **50-70**: Riesgo moderado-alto - Requiere diversificación
+                - 🔴 **70-100**: Alto riesgo - Solo inversores agresivos
                 """)
             
             st.divider()
             
-            # Gráfico radar de riesgos
-            st.subheader("️ Mapa de Riesgos por Categoría")
+            # Gráfico radar
+            st.subheader("🕸️ Mapa de Riesgos por Categoría")
             
             categorias = [r['categoria'] for r in riesgos['riesgos']]
             severidades = [r['severidad'] for r in riesgos['riesgos']]
@@ -1401,7 +1423,7 @@ with tab4:
                 st.success(f"""
                 ### ✅ PERFIL CONSERVADOR - APTO PARA BUFFETT
                 
-                **{ticker_pronostico}** presenta un perfil de riesgo **{riesgos['perfil_riesgo'].lower()}** 
+                **{ticker_analizado}** presenta un perfil de riesgo **{riesgos['perfil_riesgo'].lower()}** 
                 con score de {riesgos['score_riesgo']}/100.
                 
                 **Características:**
@@ -1415,7 +1437,7 @@ with tab4:
                 st.info(f"""
                 ### ⚖️ PERFIL BALANCEADO - ACEPTABLE CON DIVERSIFICACIÓN
                 
-                **{ticker_pronostico}** presenta un perfil de riesgo **{riesgos['perfil_riesgo'].lower()}** 
+                **{ticker_analizado}** presenta un perfil de riesgo **{riesgos['perfil_riesgo'].lower()}** 
                 con score de {riesgos['score_riesgo']}/100.
                 
                 **Recomendación:**
@@ -1429,17 +1451,16 @@ with tab4:
                 st.warning(f"""
                 ### ⚠️ PERFIL AGRESIVO - REQUIERE ANÁLISIS PROFUNDO
                 
-                **{ticker_pronostico}** presenta un perfil de riesgo **{riesgos['perfil_riesgo'].lower()}** 
+                **{ticker_analizado}** presenta un perfil de riesgo **{riesgos['perfil_riesgo'].lower()}** 
                 con score de {riesgos['score_riesgo']}/100.
                 
                 **Advertencias:**
-                - 🔴 Múltiples factores de riesgo elevados
+                -  Múltiples factores de riesgo elevados
                 - 🔴 Requiere tolerancia alta a la volatilidad
                 - 🔴 No recomendado para inversores conservadores
                 
                 *Solo considerar si el potencial de retorno justifica el riesgo asumido*
                 """)
-
 # ==============================================================================
 # FOOTER
 # ==============================================================================
