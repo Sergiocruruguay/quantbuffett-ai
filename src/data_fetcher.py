@@ -1,189 +1,215 @@
 """
-Módulo de Extracción de Datos Financieros - Versión con Caché
-Usa sistema de caché para evitar rate limiting de Yahoo Finance
+Módulo de Extracción de Datos Financieros - Versión Simplificada
 """
 
+import yfinance as yf
 import pandas as pd
-import numpy as np
 from typing import Dict, Optional
-import logging
-from src.cache_manager import obtener_datos_con_cache, obtener_datos_mock
+import streamlit as st
+import time
 
-logger = logging.getLogger(__name__)
-
-
-class FinancialDataFetcher:
-    """Clase para extraer y procesar datos financieros de una empresa."""
-    
-    def __init__(self, ticker: str):
-        self.ticker = ticker.upper()
-        self.raw_data = None
-        
-    def fetch_data(self) -> Optional[Dict]:
-        """Extrae todos los datos financieros necesarios."""
-        try:
-            logger.info(f"Extrayendo datos para {self.ticker}...")
-            
-            # Intentar obtener datos reales con caché
-            self.raw_data = obtener_datos_con_cache(self.ticker)
-            
-            if self.raw_data and self.raw_data.get('info'):
-                # Procesar datos reales
-                data = self._procesar_datos_reales()
-                data['es_mock'] = False
-                logger.info(f"Datos reales extraídos para {self.ticker}")
-                return data
-            else:
-                # Fallback a datos mock
-                logger.warning(f"Usando datos de ejemplo para {self.ticker} (API bloqueada)")
-                mock_data = obtener_datos_mock(self.ticker)
-                if mock_data:
-                    return mock_data
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error al extraer datos para {self.ticker}: {str(e)}")
-            # Último recurso: datos mock
-            return obtener_datos_mock(self.ticker)
-    
-    def _procesar_datos_reales(self) -> Dict:
-        """Procesa los datos crudos de Yahoo Finance."""
-        info = self.raw_data['info']
-        financials = self.raw_data['financials']
-        balance = self.raw_data['balance']
-        cashflow = self.raw_data['cashflow']
-        
-        # Precio y market cap
-        precio = float(info.get('currentPrice') or info.get('regularMarketPrice') or 0)
-        market_cap = info.get('marketCap', 0) or 0
-        
-        # Calcular métricas
-        roic = self._calcular_roic(financials, balance)
-        deuda_ebitda = self._calcular_deuda_ebitda(financials, balance, cashflow)
-        fcf = self._calcular_fcf(cashflow)
-        net_income = self._get_financial_item(financials, ['Net Income'], 0)
-        ebit = self._get_financial_item(financials, ['EBIT', 'Operating Income'], 0)
-        margen_seguridad = self._calcular_margen_seguridad(precio, fcf, balance, info)
-        
-        return {
-            'ticker': self.ticker,
-            'precio': precio,
-            'market_cap': market_cap,
-            'roic': roic,
-            'deuda_ebitda': deuda_ebitda,
-            'fcf': fcf,
-            'net_income': net_income,
-            'ebit': ebit,
-            'margen_seguridad': margen_seguridad,
-            'beta': float(info.get('beta', 1.0)) if info.get('beta') else 1.0,
-            'sector': info.get('sector', 'N/A'),
-            'industry': info.get('industry', 'N/A')
-        }
-    
-    def _get_financial_item(self, df, keywords: list, default: float = 0.0) -> float:
-        """Busca un item en estados financieros."""
-        try:
-            if df is None or df.empty:
-                return default
-            for kw in keywords:
-                matches = [idx for idx in df.index if kw.lower() in idx.lower()]
-                if matches:
-                    val = df.loc[matches[0]].iloc[0]
-                    return float(val) if not pd.isna(val) else default
-        except:
-            pass
-        return default
-    
-    def _get_balance_item(self, df, keywords: list, default: float = 0.0) -> float:
-        """Busca un item en el balance."""
-        return self._get_financial_item(df, keywords, default)
-    
-    def _get_cashflow_item(self, df, keywords: list, default: float = 0.0) -> float:
-        """Busca un item en el cash flow."""
-        return self._get_financial_item(df, keywords, default)
-    
-    def _calcular_roic(self, financials, balance) -> float:
-        """Calcula ROIC."""
-        try:
-            ebit = self._get_financial_item(financials, ['EBIT', 'Operating Income'], 0)
-            if ebit == 0:
-                return 0.0
-            
-            nopat = ebit * (1 - 0.21)
-            total_assets = self._get_balance_item(balance, ['Total Assets'], 0)
-            current_liabilities = self._get_balance_item(balance, ['Total Current Liabilities', 'Current Liabilities'], 0)
-            cash = self._get_balance_item(balance, ['Cash And Cash Equivalents', 'Cash'], 0)
-            
-            capital_invertido = total_assets - current_liabilities - cash
-            if capital_invertido <= 0:
-                return 0.0
-            
-            return round((nopat / capital_invertido) * 100, 2)
-        except:
-            return 0.0
-    
-    def _calcular_deuda_ebitda(self, financials, balance, cashflow) -> float:
-        """Calcula Deuda/EBITDA."""
-        try:
-            st_debt = self._get_balance_item(balance, ['Short Term Debt', 'Current Debt'], 0)
-            lt_debt = self._get_balance_item(balance, ['Long Term Debt'], 0)
-            deuda_total = abs(st_debt) + abs(lt_debt)
-            
-            cash = self._get_balance_item(balance, ['Cash And Cash Equivalents'], 0)
-            deuda_neta = deuda_total - cash
-            
-            ebit = self._get_financial_item(financials, ['EBIT', 'Operating Income'], 0)
-            depreciation = self._get_cashflow_item(cashflow, ['Depreciation'], 0)
-            ebitda = ebit + abs(depreciation)
-            
-            if ebitda <= 0:
-                return 99.0
-            
-            return round(deuda_neta / ebitda, 2)
-        except:
-            return 0.0
-    
-    def _calcular_fcf(self, cashflow) -> float:
-        """Calcula Free Cash Flow."""
-        try:
-            ocf = self._get_cashflow_item(cashflow, ['Operating Cash Flow', 'Cash Flow From Operating Activities'], 0)
-            capex = self._get_cashflow_item(cashflow, ['Capital Expenditure', 'Purchase Of Property'], 0)
-            fcf = ocf + capex
-            return round(fcf / 1e9, 2)
-        except:
-            return 0.0
-    
-    def _calcular_margen_seguridad(self, precio_actual, fcf_billones, balance, info) -> float:
-        """Calcula margen de seguridad con DCF simplificado."""
-        try:
-            if precio_actual <= 0 or fcf_billones <= 0:
-                return 0.0
-            
-            fcf = fcf_billones * 1e9
-            wacc = 0.09
-            g = 0.03
-            
-            flujos = [fcf * ((1 + 0.05) ** ano) / ((1 + wacc) ** ano) for ano in range(1, 6)]
-            vt = (flujos[-1] * (1 + wacc)) / (wacc - g)
-            vp_vt = vt / ((1 + wacc) ** 5)
-            
-            enterprise_value = sum(flujos) + vp_vt
-            
-            deuda_neta = (abs(self._get_balance_item(balance, ['Short Term Debt', 'Current Debt'], 0)) + 
-                         abs(self._get_balance_item(balance, ['Long Term Debt'], 0)) - 
-                         self._get_balance_item(balance, ['Cash And Cash Equivalents'], 0))
-            
-            equity_value = enterprise_value - deuda_neta
-            shares = info.get('sharesOutstanding', 1e9) or 1e9
-            precio_justo = equity_value / shares
-            
-            return round(((precio_justo / precio_actual) - 1) * 100, 2)
-        except:
-            return 0.0
-
-
+@st.cache_data(ttl=3600, show_spinner=False)
 def obtener_datos_financieros(ticker: str) -> Optional[Dict]:
-    """Función rápida para obtener datos financieros."""
-    fetcher = FinancialDataFetcher(ticker)
-    return fetcher.fetch_data()
+    """
+    Obtiene datos financieros de Yahoo Finance con caché.
+    Retorna datos de ejemplo si la API está bloqueada.
+    """
+    try:
+        ticker = ticker.upper()
+        
+        # Datos de respaldo (se usan si Yahoo Finance falla)
+        mock_data = {
+            'AAPL': {
+                'ticker': 'AAPL',
+                'precio': 308.50,
+                'market_cap': 2400000000000,
+                'roic': 55.2,
+                'deuda_ebitda': 0.35,
+                'fcf': 105.8,
+                'net_income': 112000000000,
+                'ebit': 130000000000,
+                'margen_seguridad': -4.3,
+                'beta': 1.10,
+                'sector': 'Technology',
+                'industry': 'Consumer Electronics',
+                'es_mock': True
+            },
+            'MSFT': {
+                'ticker': 'MSFT',
+                'precio': 415.20,
+                'market_cap': 3100000000000,
+                'roic': 38.1,
+                'deuda_ebitda': 0.42,
+                'fcf': 78.5,
+                'net_income': 88000000000,
+                'ebit': 105000000000,
+                'margen_seguridad': 3.5,
+                'beta': 0.95,
+                'sector': 'Technology',
+                'industry': 'Software',
+                'es_mock': True
+            },
+            'KO': {
+                'ticker': 'KO',
+                'precio': 62.30,
+                'market_cap': 270000000000,
+                'roic': 16.6,
+                'deuda_ebitda': 1.50,
+                'fcf': 9.8,
+                'net_income': 10500000000,
+                'ebit': 13000000000,
+                'margen_seguridad': 12.5,
+                'beta': 0.65,
+                'sector': 'Consumer Defensive',
+                'industry': 'Beverages',
+                'es_mock': True
+            },
+            'GOOGL': {
+                'ticker': 'GOOGL',
+                'precio': 175.80,
+                'market_cap': 2200000000000,
+                'roic': 26.4,
+                'deuda_ebitda': 0.28,
+                'fcf': 65.2,
+                'net_income': 75000000000,
+                'ebit': 95000000000,
+                'margen_seguridad': 8.2,
+                'beta': 1.05,
+                'sector': 'Communication Services',
+                'industry': 'Internet Content',
+                'es_mock': True
+            }
+        }
+        
+        # Intentar obtener datos reales
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            
+            # Validar que tenemos precio
+            precio = info.get('currentPrice') or info.get('regularMarketPrice')
+            if not precio or precio <= 0:
+                raise ValueError("No hay precio válido")
+            
+            # Esperar un poco para evitar rate limiting
+            time.sleep(2)
+            
+            # Obtener estados financieros
+            financials = stock.financials
+            balance = stock.balance_sheet
+            cashflow = stock.cashflow
+            
+            # Extraer métricas básicas
+            market_cap = info.get('marketCap', 0) or 0
+            beta = float(info.get('beta', 1.0)) if info.get('beta') else 1.0
+            sector = info.get('sector', 'N/A')
+            industry = info.get('industry', 'N/A')
+            
+            # Calcular métricas simples
+            roic = 0.0
+            deuda_ebitda = 0.0
+            fcf = 0.0
+            net_income = 0.0
+            ebit = 0.0
+            
+            # Intentar calcular ROIC si hay datos
+            try:
+                if not financials.empty and not balance.empty:
+                    # Buscar EBIT
+                    ebit_row = [idx for idx in financials.index if 'EBIT' in idx or 'Operating Income' in idx]
+                    if ebit_row:
+                        ebit = float(financials.loc[ebit_row[0]].iloc[0])
+                    
+                    # Buscar Net Income
+                    ni_row = [idx for idx in financials.index if 'Net Income' in idx and 'Common' not in idx]
+                    if ni_row:
+                        net_income = float(financials.loc[ni_row[0]].iloc[0])
+                    
+                    # Calcular ROIC básico
+                    if ebit != 0:
+                        total_assets_row = [idx for idx in balance.index if 'Total Assets' in idx]
+                        if total_assets_row:
+                            total_assets = float(balance.loc[total_assets_row[0]].iloc[0])
+                            if total_assets > 0:
+                                roic = ((ebit * 0.79) / total_assets) * 100
+            except:
+                pass
+            
+            # Intentar calcular Deuda/EBITDA
+            try:
+                if not balance.empty and not cashflow.empty:
+                    # Buscar deudas
+                    st_debt_row = [idx for idx in balance.index if 'Short Term Debt' in idx or 'Current Debt' in idx]
+                    lt_debt_row = [idx for idx in balance.index if 'Long Term Debt' in idx]
+                    
+                    st_debt = float(balance.loc[st_debt_row[0]].iloc[0]) if st_debt_row else 0
+                    lt_debt = float(balance.loc[lt_debt_row[0]].iloc[0]) if lt_debt_row else 0
+                    
+                    deuda_total = abs(st_debt) + abs(lt_debt)
+                    
+                    # Buscar cash
+                    cash_row = [idx for idx in balance.index if 'Cash' in idx]
+                    cash = float(balance.loc[cash_row[0]].iloc[0]) if cash_row else 0
+                    
+                    deuda_neta = deuda_total - cash
+                    
+                    # Calcular EBITDA aproximado
+                    ebitda = ebit * 1.1 if ebit != 0 else 1
+                    
+                    if ebitda > 0:
+                        deuda_ebitda = deuda_neta / ebitda
+            except:
+                pass
+            
+            # Intentar calcular FCF
+            try:
+                if not cashflow.empty:
+                    ocf_row = [idx for idx in cashflow.index if 'Operating Cash Flow' in idx]
+                    capex_row = [idx for idx in cashflow.index if 'Capital Expenditure' in idx]
+                    
+                    ocf = float(cashflow.loc[ocf_row[0]].iloc[0]) if ocf_row else 0
+                    capex = float(cashflow.loc[capex_row[0]].iloc[0]) if capex_row else 0
+                    
+                    fcf = (ocf + capex) / 1e9  # En billones
+            except:
+                pass
+            
+            # Calcular margen de seguridad simple
+            margen_seguridad = 0.0
+            try:
+                if fcf > 0 and precio > 0:
+                    shares = info.get('sharesOutstanding', 1e9) or 1e9
+                    fcf_per_share = (fcf * 1e9) / shares
+                    valor_justo = fcf_per_share * 15  # Múltiplo simple de 15x FCF
+                    margen_seguridad = ((valor_justo / precio) - 1) * 100
+            except:
+                pass
+            
+            return {
+                'ticker': ticker,
+                'precio': float(precio),
+                'market_cap': market_cap,
+                'roic': round(roic, 2),
+                'deuda_ebitda': round(deuda_ebitda, 2),
+                'fcf': round(fcf, 2),
+                'net_income': net_income,
+                'ebit': ebit,
+                'margen_seguridad': round(margen_seguridad, 2),
+                'beta': beta,
+                'sector': sector,
+                'industry': industry,
+                'es_mock': False
+            }
+            
+        except Exception as e:
+            # Si falla Yahoo Finance, usar datos mock
+            print(f"Usando datos mock para {ticker}: {str(e)}")
+            if ticker in mock_data:
+                return mock_data[ticker]
+            return None
+            
+    except Exception as e:
+        print(f"Error general en obtener_datos_financieros: {str(e)}")
+        return None
+
 
