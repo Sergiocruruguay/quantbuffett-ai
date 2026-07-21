@@ -1,7 +1,7 @@
 """
 QuantBuffett AI - Plataforma de Análisis Financiero Profesional
 Autor: [Tu Nombre]
-Versión: 0.2.0 (Con datos reales)
+Versión: 0.2.1 (Con caché y manejo de rate limiting)
 """
 
 import streamlit as st
@@ -58,7 +58,7 @@ st.divider()
 # ==============================================================================
 # BARRA LATERAL (Panel de Control)
 # ==============================================================================
-st.sidebar.header("⚙️ Panel de Control")
+st.sidebar.header("️ Panel de Control")
 st.sidebar.markdown(f"**Fecha:** {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
 modo_analisis = st.sidebar.radio(
@@ -133,12 +133,19 @@ if modo_analisis == "🔍 Activo Único":
     elif st.session_state.datos_cache:
         datos = st.session_state.datos_cache
         
+        # Mostrar aviso si son datos de ejemplo
+        if datos.get('es_mock', False):
+            st.warning("""
+            ⚠️ **Modo Demostración**: Yahoo Finance está temporalmente bloqueado. 
+            Mostrando datos de ejemplo para demostración. Los datos reales se cargarán automáticamente cuando la API esté disponible.
+            """)
+        
         # Métricas principales
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             st.metric(
-                label="💰 Precio Actual",
+                label=" Precio Actual",
                 value=f"${datos['precio']:.2f}",
                 delta=f"Market Cap: ${datos['market_cap']/1e9:.1f}B" if datos['market_cap'] else "N/A",
                 help="Precio de mercado en tiempo real"
@@ -154,7 +161,7 @@ if modo_analisis == "🔍 Activo Único":
             )
         
         with col3:
-            deuda_status = "✅ Sólido" if datos['deuda_ebitda'] < 2 else "⚠️ Moderado" if datos['deuda_ebitda'] < 4 else "🔴 Alto"
+            deuda_status = "✅ Sólido" if datos['deuda_ebitda'] < 2 else "️ Moderado" if datos['deuda_ebitda'] < 4 else "🔴 Alto"
             st.metric(
                 label=" Deuda/EBITDA",
                 value=f"{datos['deuda_ebitda']:.2f}x",
@@ -163,7 +170,7 @@ if modo_analisis == "🔍 Activo Único":
             )
         
         with col4:
-            margen_status = "🟢 Atractivo" if datos['margen_seguridad'] > 20 else " Justo" if datos['margen_seguridad'] > 0 else "🔴 Sobrevalorado"
+            margen_status = "🟢 Atractivo" if datos['margen_seguridad'] > 20 else "⚪ Justo" if datos['margen_seguridad'] > 0 else "🔴 Sobrevalorado"
             st.metric(
                 label="🎯 Margen de Seguridad",
                 value=f"{datos['margen_seguridad']:.1f}%",
@@ -207,7 +214,7 @@ if modo_analisis == "🔍 Activo Único":
             """)
         elif roic_ok and deuda_ok:
             st.warning("""
-            ### ️ OBSERVAR / ESPERAR MEJOR PRECIO
+            ### ⏳ OBSERVAR / ESPERAR MEJOR PRECIO
             **Negocio de calidad pero precio elevado:**
             - ✅ ROIC excelente - Negocio maravilloso
             - ✅ Deuda controlada - Gestión conservadora
@@ -217,7 +224,7 @@ if modo_analisis == "🔍 Activo Único":
             """)
         else:
             st.info("""
-            ###  ANÁLISIS MIXTO
+            ### 🔍 ANÁLISIS MIXTO
             **Requiere análisis más profundo:**
             - Revisar tendencias históricas
             - Analizar ventajas competitivas
@@ -227,7 +234,7 @@ if modo_analisis == "🔍 Activo Único":
             """)
         
         # Información adicional
-        with st.expander(" Información de la Empresa"):
+        with st.expander("ℹ️ Información de la Empresa"):
             st.write(f"**Sector:** {datos.get('sector', 'N/A')}")
             st.write(f"**Industria:** {datos.get('industry', 'N/A')}")
             st.write(f"**Beta:** {datos.get('beta', 'N/A')}")
@@ -236,7 +243,7 @@ if modo_analisis == "🔍 Activo Único":
     else:
         # Estado inicial (sin datos)
         st.markdown("""
-        ### 👈 Ingresa un ticker y haz clic en "Analizar Ahora"
+        ###  Ingresa un ticker y haz clic en "Analizar Ahora"
         
         La aplicación extraerá:
         - Precio actual y capitalización de mercado
@@ -282,9 +289,10 @@ else:  # Modo Portafolio
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.9em;'>
-    <p>QuantBuffett AI v0.2.0 | Desarrollado con Streamlit + Python + yfinance</p>
+    <p>QuantBuffett AI v0.2.1 | Desarrollado con Streamlit + Python + yfinance</p>
     <p><em>"Es mucho mejor comprar una empresa maravillosa a un precio justo, 
     que una empresa justa a un precio maravilloso." - Warren Buffett</em></p>
 </div>
 """, unsafe_allow_html=True)
+
 
