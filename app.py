@@ -1,6 +1,6 @@
-"""
+ """
 QuantBuffett AI - Plataforma Profesional de Análisis Financiero
-Versión: 1.0.0-rc2 | Pestaña 4: Pronóstico ML + Análisis de Riesgos
+Versión: 1.0.0-rc2 | Con Debug Alpha Vantage
 """
 
 import streamlit as st
@@ -476,7 +476,7 @@ st.sidebar.header("⚙️ Configuración")
 
 modo_usuario = st.sidebar.radio(
     "Modo de Visualización",
-    [" Simple (Principiantes)", " Avanzado (Expertos)"],
+    ["🟢 Simple (Principiantes)", "🔵 Avanzado (Expertos)"],
     help="Simple: veredictos claros. Avanzado: métricas detalladas y parámetros editables."
 )
 
@@ -488,6 +488,38 @@ if ALPHA_VANTAGE_KEY and ALPHA_VANTAGE_KEY != "DEMO_KEY":
     st.sidebar.caption("500 llamadas/día disponibles")
 else:
     st.sidebar.warning("⚠️ Modo Demo (datos simulados)")
+
+# ==============================================================================
+# DEBUG: PROBAR CONEXIÓN ALPHA VANTAGE
+# ==============================================================================
+st.sidebar.divider()
+st.sidebar.subheader("🔧 Debug Alpha Vantage")
+
+if st.sidebar.button("🔄 Probar Conexión API"):
+    with st.spinner("Probando conexión..."):
+        try:
+            test_url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=AAPL&apikey={ALPHA_VANTAGE_KEY}"
+            resp = requests.get(test_url, timeout=10)
+            data = resp.json()
+            
+            if "Time Series (Daily)" in data:
+                st.sidebar.success("✅ API funcionando correctamente")
+                ultimo_dia = list(data['Time Series (Daily)'].keys())[0]
+                ultimo_precio = data['Time Series (Daily)'][ultimo_dia]['4. close']
+                st.sidebar.write(f"📊 Último precio AAPL: ${ultimo_precio}")
+                st.sidebar.info(f"📅 Datos del: {ultimo_dia}")
+            elif "Note" in data:
+                st.sidebar.error("⚠️ Rate limit alcanzado")
+                st.sidebar.warning("Espera 60 segundos y vuelve a intentar")
+                st.sidebar.write(data["Note"])
+            elif "Information" in data:
+                st.sidebar.warning("ℹ️ Información de API")
+                st.sidebar.write(data["Information"])
+            else:
+                st.sidebar.error("❌ Error desconocido")
+                st.sidebar.json(data)
+        except Exception as e:
+            st.sidebar.error(f"❌ Error de conexión: {str(e)}")
 
 st.sidebar.divider()
 
@@ -505,8 +537,8 @@ Desarrollado con Streamlit + Python
 # ==============================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
     "🏠 Dashboard",
-    "🔍 Análisis de Activo",
-    "💼 Portafolio",
+    " Análisis de Activo",
+    " Portafolio",
     "🔮 Pronóstico y Riesgos"
 ])
 
@@ -516,15 +548,15 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.header("🏠 Dashboard Ejecutivo")
     
-    if modo_usuario == " Simple (Principiantes)":
+    if modo_usuario == "🟢 Simple (Principiantes)":
         st.markdown("""
         ### Bienvenido a QuantBuffett AI
         
         Esta aplicación te ayudará a tomar decisiones de inversión informadas.
         
         **Para comenzar:**
-        1. Ve a la pestaña ** Análisis de Activo** para analizar empresas individuales
-        2. Ve a la pestaña ** Portafolio** para optimizar tu diversificación
+        1. Ve a la pestaña **🔍 Análisis de Activo** para analizar empresas individuales
+        2. Ve a la pestaña **💼 Portafolio** para optimizar tu diversificación
         3. Ve a la pestaña ** Pronóstico y Riesgos** para ver proyecciones
         
         **Empresas de ejemplo:** AAPL, MSFT, KO, GOOGL, WMT, TSLA
@@ -585,7 +617,7 @@ with tab2:
         with col2:
             st.metric("📈 P/E", f"{datos.get('pe_ratio', 0):.1f}x")
         with col3:
-            st.metric(" ROE", f"{datos.get('roic', 0):.1f}%")
+            st.metric("📊 ROE", f"{datos.get('roic', 0):.1f}%")
         with col4:
             st.metric("🎯 Beta", f"{datos.get('beta', 1):.2f}")
         
@@ -601,7 +633,7 @@ with tab2:
         
         if datos.get('descripcion'):
             st.divider()
-            st.subheader("🏢 Descripción de la Empresa")
+            st.subheader(" Descripción de la Empresa")
             st.write(datos['descripcion'])
 
 # ==============================================================================
@@ -610,7 +642,7 @@ with tab2:
 with tab3:
     st.header("💼 Optimizador de Portafolio")
     
-    if modo_usuario == " Simple (Principiantes)":
+    if modo_usuario == "🟢 Simple (Principiantes)":
         st.markdown("""
         ### 🎯 Optimización Inteligente de Portafolio
         
@@ -639,7 +671,7 @@ with tab3:
         ).upper()
         
         if ticker_personalizado and ticker_personalizado not in tickers_seleccionados:
-            if st.button(f" Agregar {ticker_personalizado}"):
+            if st.button(f"➕ Agregar {ticker_personalizado}"):
                 with st.spinner(f"Obteniendo datos REALES de {ticker_personalizado}..."):
                     datos_nuevo = obtener_datos_financieros(ticker_personalizado)
                     
@@ -682,7 +714,7 @@ with tab3:
                 
                 st.divider()
                 
-                st.subheader("🥧 Distribución Recomendada")
+                st.subheader(" Distribución Recomendada")
                 
                 df_pesos = pd.DataFrame({
                     'Empresa': opt['tickers'],
@@ -707,7 +739,7 @@ with tab3:
                 
                 st.divider()
                 
-                st.subheader("💡 ¿Qué significa esto?")
+                st.subheader(" ¿Qué significa esto?")
                 
                 if opt['sharpe'] > 1.0:
                     st.success(f"""
@@ -739,7 +771,7 @@ with tab3:
                     """)
                 elif opt['volatilidad'] < 25:
                     st.markdown("""
-                    **Moderado** 🟡  
+                    **Moderado**   
                     Este portafolio balancea crecimiento y estabilidad. Ideal si:
                     - Buscas crecimiento pero con cierta protección
                     - Tu horizonte de inversión es mediano (3-7 años)
@@ -813,7 +845,7 @@ with tab3:
                     if agregados:
                         st.success(f"✅ Agregados: {', '.join(agregados)}")
                     if errores:
-                        st.error(f" No encontrados: {', '.join(errores)}")
+                        st.error(f"❌ No encontrados: {', '.join(errores)}")
                     
                     st.rerun()
         
@@ -993,34 +1025,26 @@ with tab3:
                             st.error(f"**Vender:** {', '.join(vender['Activo'].tolist())}")
 
 # ==============================================================================
-# PESTAÑA 4: PRONÓSTICO Y RIESGOS (CORREGIDO)
+# PESTAÑA 4: PRONÓSTICO Y RIESGOS
 # ==============================================================================
 with tab4:
-    st.header(" Pronóstico y Análisis de Riesgos")
+    st.header("🔮 Pronóstico y Análisis de Riesgos")
     
-    # Input de ticker - FORZAR MAYÚSCULAS
     ticker_input_raw = st.text_input("Ticker para pronóstico y análisis de riesgos", value="AAPL")
     ticker_pronostico = ticker_input_raw.strip().upper()
     
-    # Botón de análisis
-    if st.button("🔮 Analizar Pronóstico y Riesgos", type="primary"):
+    if st.button(" Analizar Pronóstico y Riesgos", type="primary"):
         with st.spinner(f"Ejecutando modelos para {ticker_pronostico}..."):
             try:
-                # Obtener datos
                 datos = obtener_datos_financieros(ticker_pronostico)
                 
                 if datos and datos.get('precio', 0) > 0:
-                    # Agregar a MOCK_DATABASE si no existe
                     if ticker_pronostico not in MOCK_DATABASE:
                         MOCK_DATABASE[ticker_pronostico] = datos
                     
-                    # Calcular pronóstico
                     pronostico = pronosticar_precio(ticker_pronostico, dias_pronostico=90)
-                    
-                    # Calcular análisis de riesgos
                     analisis_riesgos = analizar_riesgos_ia(ticker_pronostico)
                     
-                    # Guardar en session_state
                     st.session_state.pronostico = pronostico
                     st.session_state.riesgos = analisis_riesgos
                     st.session_state.ticker_analizado = ticker_pronostico
@@ -1037,29 +1061,23 @@ with tab4:
                 st.session_state.riesgos = None
                 st.session_state.error_pronostico = f"Error en el análisis: {str(e)}"
     
-    # Mostrar error si existe
     if st.session_state.get('error_pronostico'):
         st.error(st.session_state.error_pronostico)
         st.info("💡 Tickers disponibles: AAPL, MSFT, KO, GOOGL, WMT, TSLA")
     
-    # Mostrar resultados si existen
     elif st.session_state.get('pronostico') and st.session_state.get('riesgos'):
         pron = st.session_state.pronostico
         riesgos = st.session_state.riesgos
         ticker_analizado = st.session_state.get('ticker_analizado', ticker_pronostico)
         
-        # Indicador de fuente
         datos = MOCK_DATABASE.get(ticker_analizado, {})
         if datos.get('es_real'):
             st.success(f"✅ Datos REALES de {datos.get('fuente', 'Alpha Vantage')}")
         else:
-            st.warning(f"⚠️ {datos.get('fuente', 'Datos de demostración')}")
+            st.warning(f"️ {datos.get('fuente', 'Datos de demostración')}")
         
         st.divider()
         
-        # ==================================================================
-        # MODO SIMPLE
-        # ==================================================================
         if modo_usuario == "🟢 Simple (Principiantes)":
             st.subheader("📈 Pronóstico de Precio a 90 Días")
             
@@ -1071,11 +1089,10 @@ with tab4:
                 st.metric("📊 Cambio 30 días", f"{cambio_30d:.1f}%", "↗️" if cambio_30d > 0 else "↘️")
             with col3:
                 cambio_pron = pron['cambio_pronostico']
-                st.metric("🔮 Pronóstico 90 días", f"{cambio_pron:.1f}%", "↗️" if cambio_pron > 0 else "↘️")
+                st.metric(" Pronóstico 90 días", f"{cambio_pron:.1f}%", "↗️" if cambio_pron > 0 else "↘️")
             
             st.divider()
             
-            # Gráfico de pronóstico
             st.subheader("📊 Proyección Visual")
             
             fig = go.Figure()
@@ -1135,8 +1152,7 @@ with tab4:
             
             st.divider()
             
-            # Veredicto simple
-            st.subheader("🎯 Veredicto del Modelo")
+            st.subheader(" Veredicto del Modelo")
             
             if pron['cambio_pronostico'] > 10:
                 st.success(f"""
@@ -1169,7 +1185,6 @@ with tab4:
             
             st.divider()
             
-            # Análisis de riesgos simplificado
             st.subheader("🛡️ Análisis de Riesgos")
             
             st.markdown(f"""
@@ -1179,7 +1194,6 @@ with tab4:
             **Recomendación:** {riesgos['recomendacion']}
             """)
             
-            # Top 3 riesgos
             st.markdown("### ⚠️ Principales Riesgos Identificados")
             
             riesgos_ordenados = sorted(riesgos['riesgos'], key=lambda x: x['severidad'], reverse=True)[:3]
@@ -1188,9 +1202,9 @@ with tab4:
                 if riesgo['nivel'] == 'Crítico':
                     icono = "🔴"
                 elif riesgo['nivel'] == 'Alto':
-                    icono = ""
+                    icono = "🟠"
                 elif riesgo['nivel'] == 'Moderado':
-                    icono = ""
+                    icono = "🟡"
                 else:
                     icono = "🟢"
                 
@@ -1200,9 +1214,6 @@ with tab4:
                 - **Mitigación:** {riesgo['mitigacion']}
                 """)
         
-        # ==================================================================
-        # MODO AVANZADO
-        # ==================================================================
         else:
             st.subheader("📈 Pronóstico de Precio con Bandas de Confianza (95%)")
             
@@ -1214,14 +1225,13 @@ with tab4:
                 st.metric("📊 Cambio 30 días", f"{cambio_30d:.1f}%", "↗️" if cambio_30d > 0 else "↘️")
             with col3:
                 cambio_pron = pron['cambio_pronostico']
-                st.metric("🔮 Pronóstico 90 días", f"{cambio_pron:.1f}%", "↗️" if cambio_pron > 0 else "↘️")
+                st.metric(" Pronóstico 90 días", f"{cambio_pron:.1f}%", "↗️" if cambio_pron > 0 else "↘️")
             with col4:
                 st.metric("⚠️ Volatilidad Diaria", f"{pron['volatilidad_diaria']:.2f}%")
             
             st.divider()
             
-            # Gráfico de pronóstico
-            st.subheader("📊 Proyección con Intervalos de Confianza")
+            st.subheader(" Proyección con Intervalos de Confianza")
             
             fig = go.Figure()
             
@@ -1280,8 +1290,7 @@ with tab4:
             
             st.divider()
             
-            # Análisis de tendencia
-            st.subheader(" Análisis de Tendencia")
+            st.subheader("📊 Análisis de Tendencia")
             
             col1, col2 = st.columns(2)
             
@@ -1312,7 +1321,6 @@ with tab4:
             
             st.divider()
             
-            # Análisis de riesgos detallado
             st.subheader("🛡️ Análisis de Riesgos Consolidado")
             
             col1, col2 = st.columns([1, 2])
@@ -1363,7 +1371,6 @@ with tab4:
             
             st.divider()
             
-            # Gráfico radar
             st.subheader("🕸️ Mapa de Riesgos por Categoría")
             
             categorias = [r['categoria'] for r in riesgos['riesgos']]
@@ -1399,7 +1406,6 @@ with tab4:
             
             st.divider()
             
-            # Detalle de riesgos
             st.subheader("🔍 Detalle de Riesgos Identificados")
             
             for i, riesgo in enumerate(riesgos['riesgos'], 1):
@@ -1416,7 +1422,6 @@ with tab4:
             
             st.divider()
             
-            # Veredicto final
             st.subheader("🎯 Veredicto Final del Agente IA")
             
             if riesgos['score_riesgo'] < 30:
@@ -1455,12 +1460,13 @@ with tab4:
                 con score de {riesgos['score_riesgo']}/100.
                 
                 **Advertencias:**
-                -  Múltiples factores de riesgo elevados
+                - 🔴 Múltiples factores de riesgo elevados
                 - 🔴 Requiere tolerancia alta a la volatilidad
                 - 🔴 No recomendado para inversores conservadores
                 
                 *Solo considerar si el potencial de retorno justifica el riesgo asumido*
                 """)
+
 # ==============================================================================
 # FOOTER
 # ==============================================================================
@@ -1472,5 +1478,3 @@ st.markdown("""
     <p><em>"La regla número 1 es no perder dinero. La regla número 2 es no olvidar la regla número 1."</em> — Warren Buffett</p>
 </div>
 """, unsafe_allow_html=True)
-
-
