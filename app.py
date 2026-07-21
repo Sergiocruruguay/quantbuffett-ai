@@ -1,6 +1,6 @@
 """
 QuantBuffett AI - Plataforma de Análisis Financiero Profesional
-Versión: 0.4.0 (Con Optimización de Portafolio Markowitz)
+Versión: 0.5.0 (Con Pronóstico ML y Series de Tiempo)
 """
 
 import streamlit as st
@@ -8,11 +8,11 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
 from scipy.optimize import minimize
 
 # ==============================================================================
-# BASE DE DATOS DE EJEMPLO (Datos realistas)
+# BASE DE DATOS DE EJEMPLO (Datos realistas + Histórico simulado)
 # ==============================================================================
 MOCK_DATABASE = {
     'AAPL': {
@@ -65,6 +65,33 @@ MOCK_DATABASE = {
     }
 }
 
+# Datos históricos simulados (últimos 365 días)
+def generar_historico_simulado(ticker: str, precio_actual: float, volatilidad: float) -> pd.DataFrame:
+    """Genera datos históricos simulados realistas."""
+    np.random.seed(42)  # Para reproducibilidad
+    
+    dias = 365
+    fechas = pd.date_range(end=datetime.now(), periods=dias, freq='D')
+    
+    # Simular movimiento browniano geométrico
+    retornos_diarios = np.random.normal(0.0008, volatilidad / np.sqrt(252), dias)
+    precios = [precio_actual]
+    
+    for i in range(dias - 1, 0, -1):
+        precio_anterior = precios[-1]
+        precio_nuevo = precio_anterior * (1 - retornos_diarios[i])
+        precios.append(precio_nuevo)
+    
+    precios.reverse()
+    
+    df = pd.DataFrame({
+        'Fecha': fechas,
+        'Precio': precios,
+        'Volumen': np.random.randint(1000000, 50000000, dias)
+    })
+    
+    return df
+
 # ==============================================================================
 # FUNCIONES AUXILIARES
 # ==============================================================================
@@ -76,42 +103,27 @@ def obtener_datos_financieros(ticker: str):
     return None
 
 def optimizar_portafolio(tickers: list, rf: float = 0.04) -> dict:
-    """
-    Optimiza portafolio usando teoría de Markowitz.
-    
-    Args:
-        tickers: Lista de tickers
-        rf: Tasa libre de riesgo (4%)
-    
-    Returns:
-        Diccionario con resultados de optimización
-    """
-    # Datos de ejemplo para simulación
+    """Optimiza portafolio usando teoría de Markowitz."""
     n = len(tickers)
     retornos = np.array([MOCK_DATABASE[t]['retorno_anual'] for t in tickers])
     volatilidades = np.array([MOCK_DATABASE[t]['volatilidad_anual'] for t in tickers])
     
-    # Matriz de correlación simplificada (ejemplo)
     correlacion = np.eye(n)
     for i in range(n):
         for j in range(i+1, n):
-            correlacion[i,j] = correlacion[j,i] = 0.3  # Correlación moderada
+            correlacion[i,j] = correlacion[j,i] = 0.3
     
-    # Matriz de covarianza
     cov_matrix = np.outer(volatilidades, volatilidades) * correlacion
     
-    # Función objetivo: maximizar Sharpe Ratio
     def sharpe_negativo(pesos):
         port_retorno = np.sum(retornos * pesos)
         port_vol = np.sqrt(np.dot(pesos.T, np.dot(cov_matrix, pesos)))
         sharpe = (port_retorno - rf) / port_vol if port_vol > 0 else 0
         return -sharpe
     
-    # Restricciones: pesos suman 1, todos positivos
     restricciones = {'type': 'eq', 'fun': lambda x: np.sum(x) - 1.0}
     limites = tuple((0.0, 1.0) for _ in range(n))
     
-    # Optimización
     pesos_iniciales = np.ones(n) / n
     resultado = minimize(sharpe_negativo, pesos_iniciales, 
                         method='SLSQP', bounds=limites, constraints=restricciones)
@@ -121,7 +133,6 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04) -> dict:
     volatilidad_optima = np.sqrt(np.dot(pesos_optimos.T, np.dot(cov_matrix, pesos_optimos)))
     sharpe_optimo = (retorno_optimo - rf) / volatilidad_optima
     
-    # Generar frontera eficiente (Montecarlo)
     mc_retornos = []
     mc_vols = []
     mc_sharpes = []
@@ -149,6 +160,63 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04) -> dict:
         }
     }
 
+def pronosticar_precio(ticker: str, dias_pronostico: int = 90) -> dict:
+    """
+    Pronóstico de precio usando regresión polinómica + bandas de confianza.
+    
+    Args:
+        ticker: Símbolo bursátil
+        dias_pronostico: Días a pronosticar (30, 60, 90)
+    
+    Returns:
+        Diccionario con datos del pronóstico
+    """
+    datos = MOCK_DATABASE[ticker]
+    precio_actual = datos['precio']
+    volatilidad = datos['volatilidad_anual']
+    
+    # Generar histórico
+    historico = generar_historico_simulado(ticker, precio_actual, volatilidad)
+    
+    # Calcular tendencia (regresión lineal simple)
+    x = np.arange(len(historico))
+    y = historico['Precio'].values
+    
+    # Regresión lineal
+    coeficientes = np.polyfit(x, y, 1)
+    tendencia = np.poly1d(coeficientes)
+    
+    # Pronóstico
+    x_futuro = np.arange(len(historico), len(historico) + dias_pronostico)
+    precios_pronosticados = tendencia(x_futuro)
+    
+    # Bandas de confianza (95%)
+    error_estandar = volatilidad * precio_actual / np.sqrt(252)
+    intervalo_confianza = 1.96 * error_estandar * np.sqrt(np.arange(1, dias_pronostico + 1))
+    
+    limite_superior = precios_pronosticados + intervalo_confianza
+    limite_inferior = precios_pronosticados - intervalo_confianza
+    
+    # Calcular métricas
+    precio_inicial = historico['Precio'].iloc[-30]  # Precio hace 30 días
+    cambio_30d = ((precio_actual - precio_inicial) / precio_inicial) * 100
+    
+    precio_final_pronostico = precios_pronosticados[-1]
+    cambio_pronostico = ((precio_final_pronostico - precio_actual) / precio_actual) * 100
+    
+    return {
+        'ticker': ticker,
+        'historico': historico,
+        'precios_pronosticados': precios_pronosticados,
+        'limite_superior': limite_superior,
+        'limite_inferior': limite_inferior,
+        'dias_pronostico': dias_pronostico,
+        'cambio_30d': cambio_30d,
+        'cambio_pronostico': cambio_pronostico,
+        'volatilidad_diaria': volatilidad / np.sqrt(252) * 100,
+        'tendencia': 'Alcista' if coeficientes[0] > 0 else 'Bajista'
+    }
+
 # ==============================================================================
 # CONFIGURACIÓN DE LA PÁGINA
 # ==============================================================================
@@ -173,19 +241,19 @@ st.divider()
 # ==============================================================================
 # BARRA LATERAL (Panel de Control)
 # ==============================================================================
-st.sidebar.header("⚙️ Panel de Control")
+st.sidebar.header("️ Panel de Control")
 st.sidebar.markdown(f"**Fecha:** {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
 modo_analisis = st.sidebar.radio(
     "Modo de Análisis",
-    ["🔍 Activo Único", "💼 Portafolio"],
-    help="Selecciona si quieres analizar una empresa individual o un portafolio de varias empresas"
+    ["🔍 Activo Único", "💼 Portafolio", "🔮 Pronóstico ML"],
+    help="Selecciona el modo de análisis"
 )
 
 st.sidebar.divider()
 
 # Input del ticker
-if modo_analisis == "🔍 Activo Único":
+if modo_analisis in ["🔍 Activo Único", "🔮 Pronóstico ML"]:
     ticker_input = st.sidebar.text_input(
         "Ticker de la empresa",
         value="AAPL",
@@ -200,8 +268,21 @@ else:
 
 st.sidebar.divider()
 
+# Configuración adicional para pronóstico
+if modo_analisis == " Pronóstico ML":
+    dias_pronostico = st.sidebar.slider(
+        "Horizonte de pronóstico (días)",
+        min_value=30,
+        max_value=180,
+        value=90,
+        step=30,
+        help="Número de días a proyectar"
+    )
+else:
+    dias_pronostico = 90
+
 # Botón para ejecutar análisis
-ejecutar_analisis = st.sidebar.button(" Analizar Ahora", type="primary", use_container_width=True)
+ejecutar_analisis = st.sidebar.button("🔍 Analizar Ahora", type="primary", use_container_width=True)
 
 st.sidebar.divider()
 
@@ -212,7 +293,7 @@ st.sidebar.markdown("""
 Esta aplicación combina:
 - ✅ Análisis fundamental (estilo Warren Buffett)
 - ✅ Optimización de portafolios (Markowitz)
-- ✅ Pronóstico con Machine Learning (Prophet)
+- ✅ Pronóstico con Machine Learning
 - ✅ Análisis de riesgos con IA (NLP)
 
 **Modo Demostración:** Mostrando datos de ejemplo.
@@ -249,55 +330,32 @@ if modo_analisis == "🔍 Activo Único":
     elif st.session_state.datos_cache:
         datos = st.session_state.datos_cache
         
-        # Mostrar aviso de modo demostración
         st.warning("""
         ⚠️ **Modo Demostración**: Mostrando datos de ejemplo para desarrollo. 
         Los datos reales de Yahoo Finance se integrarán en la próxima versión.
         """)
         
-        # Métricas principales
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             market_cap_text = f"${datos['market_cap']/1e9:.1f}B" if datos.get('market_cap', 0) else "N/A"
-            st.metric(
-                label="💰 Precio Actual",
-                value=f"${datos['precio']:.2f}",
-                delta=market_cap_text,
-                help="Precio de mercado en tiempo real"
-            )
+            st.metric(label="💰 Precio Actual", value=f"${datos['precio']:.2f}", delta=market_cap_text)
         
         with col2:
             roic_val = datos.get('roic', 0)
             roic_delta = "Excelente" if roic_val > 15 else "Bueno" if roic_val > 10 else "Regular"
-            st.metric(
-                label="📊 ROIC",
-                value=f"{roic_val:.1f}%",
-                delta=roic_delta,
-                help="Return on Invested Capital - Eficiencia del negocio. >15% es excelente"
-            )
+            st.metric(label="📊 ROIC", value=f"{roic_val:.1f}%", delta=roic_delta)
         
         with col3:
             deuda_val = datos.get('deuda_ebitda', 0)
-            deuda_status = "✅ Sólido" if deuda_val < 2 else "️ Moderado" if deuda_val < 4 else "🔴 Alto"
-            st.metric(
-                label="📉 Deuda/EBITDA",
-                value=f"{deuda_val:.2f}x",
-                delta=deuda_status,
-                help="Ratio de solvencia - Capacidad de pago de deuda. <2x es sólido"
-            )
+            deuda_status = "✅ Sólido" if deuda_val < 2 else "⚠️ Moderado" if deuda_val < 4 else "🔴 Alto"
+            st.metric(label=" Deuda/EBITDA", value=f"{deuda_val:.2f}x", delta=deuda_status)
         
         with col4:
             margen_val = datos.get('margen_seguridad', 0)
-            margen_status = "🟢 Atractivo" if margen_val > 20 else " Justo" if margen_val > 0 else "🔴 Sobrevalorado"
-            st.metric(
-                label="🎯 Margen de Seguridad",
-                value=f"{margen_val:.1f}%",
-                delta=margen_status,
-                help="Diferencia entre valor intrínseco (DCF) y precio de mercado"
-            )
+            margen_status = "🟢 Atractivo" if margen_val > 20 else "⚪ Justo" if margen_val > 0 else "🔴 Sobrevalorado"
+            st.metric(label="🎯 Margen de Seguridad", value=f"{margen_val:.1f}%", delta=margen_status)
         
-        # Análisis detallado
         st.divider()
         st.subheader("📈 Análisis Detallado")
         
@@ -314,7 +372,6 @@ if modo_analisis == "🔍 Activo Único":
             st.metric("Net Income", f"${net_income_billones:.2f}B")
             st.caption("Beneficio contable después de impuestos")
         
-        # Veredicto estilo Buffett
         st.divider()
         st.subheader("🎯 Veredicto del Agente")
         
@@ -334,11 +391,11 @@ if modo_analisis == "🔍 Activo Único":
             """)
         elif roic_ok and deuda_ok:
             st.warning("""
-            ### ⏳ OBSERVAR / ESPERAR MEJOR PRECIO
+            ###  OBSERVAR / ESPERAR MEJOR PRECIO
             **Negocio de calidad pero precio elevado:**
             - ✅ ROIC excelente - Negocio maravilloso
             - ✅ Deuda controlada - Gestión conservadora
-            - ️ Margen de seguridad negativo - Esperar corrección
+            - ⚠️ Margen de seguridad negativo - Esperar corrección
             
             *Recomendación: Agregar a watchlist y esperar mejor entrada*
             """)
@@ -353,7 +410,6 @@ if modo_analisis == "🔍 Activo Único":
             *No cumple todos los criterios de calidad/valor*
             """)
         
-        # Información adicional
         with st.expander("ℹ️ Información de la Empresa"):
             st.write(f"**Sector:** {datos.get('sector', 'N/A')}")
             st.write(f"**Industria:** {datos.get('industry', 'N/A')}")
@@ -361,36 +417,26 @@ if modo_analisis == "🔍 Activo Único":
             st.write(f"**Ticker:** {datos.get('ticker', 'N/A')}")
     
     else:
-        # Estado inicial (sin datos)
         st.markdown("""
         ### 👈 Ingresa un ticker y haz clic en "Analizar Ahora"
         
         **Tickers disponibles:** AAPL, MSFT, KO, GOOGL, WMT, TSLA
-        
-        La aplicación mostrará:
-        - Precio actual y capitalización de mercado
-        - ROIC (eficiencia del negocio)
-        - Ratio Deuda/EBITDA (solvencia)
-        - Margen de seguridad (valoración DCF)
-        - Flujo de caja libre
         """)
 
-else:  # Modo Portafolio
+elif modo_analisis == "💼 Portafolio":
     tickers = [t.strip() for t in ticker_input.split(",") if t.strip()]
     st.info(f"💼 Analizando portafolio de **{len(tickers)} activos**: {', '.join(tickers)}")
     
     if ejecutar_analisis:
-        # Validar que todos los tickers existen
         tickers_validos = [t for t in tickers if t in MOCK_DATABASE]
         
         if len(tickers_validos) < 2:
             st.error("Se necesitan al menos 2 tickers válidos para optimizar el portafolio.")
             st.info(f"Tickers disponibles: {', '.join(MOCK_DATABASE.keys())}")
         else:
-            with st.spinner("📊 Optimizando portafolio..."):
+            with st.spinner(" Optimizando portafolio..."):
                 opt_result = optimizar_portafolio(tickers_validos)
             
-            # Métricas del portafolio óptimo
             st.subheader("🎯 Portafolio Óptimo (Maximiza Ratio de Sharpe)")
             
             col1, col2, col3 = st.columns(3)
@@ -403,7 +449,6 @@ else:  # Modo Portafolio
             
             st.divider()
             
-            # Gráfico de torta con asignación óptima
             st.subheader("🥧 Asignación de Capital Óptima")
             
             df_pesos = pd.DataFrame({
@@ -423,8 +468,7 @@ else:  # Modo Portafolio
             
             st.divider()
             
-            # Frontera Eficiente
-            st.subheader("📊 Frontera Eficiente de Markowitz")
+            st.subheader(" Frontera Eficiente de Markowitz")
             st.markdown("""
             Cada punto representa un portafolio posible. El **portafolio óptimo** (estrella roja) 
             maximiza el retorno por unidad de riesgo (Ratio de Sharpe).
@@ -432,7 +476,6 @@ else:  # Modo Portafolio
             
             fig_ef = go.Figure()
             
-            # Nube de puntos de Montecarlo
             fig_ef.add_trace(go.Scatter(
                 x=opt_result['mc_data']['volatilidades'],
                 y=opt_result['mc_data']['retornos'],
@@ -447,7 +490,6 @@ else:  # Modo Portafolio
                 name='Portafolios Aleatorios'
             ))
             
-            # Portafolio óptimo
             fig_ef.add_trace(go.Scatter(
                 x=[opt_result['volatilidad']],
                 y=[opt_result['retorno']],
@@ -467,9 +509,7 @@ else:  # Modo Portafolio
             st.plotly_chart(fig_ef, use_container_width=True)
             
             st.divider()
-            
-            # Tabla detallada
-            st.subheader(" Detalle de Asignación")
+            st.subheader("📋 Detalle de Asignación")
             st.dataframe(df_pesos, use_container_width=True, hide_index=True)
     
     else:
@@ -477,13 +517,191 @@ else:  # Modo Portafolio
         ### 👈 Ingresa tickers y haz clic en "Analizar Ahora"
         
         **Tickers disponibles:** AAPL, MSFT, KO, GOOGL, WMT, TSLA
-        
-        La aplicación calculará:
-        - Asignación óptima de capital (Markowitz)
-        - Frontera eficiente visualizada
-        - Ratio de Sharpe máximo
-        - Retorno y volatilidad esperados
         """)
+
+else:  # Modo Pronóstico ML
+    st.info(f"🔮 Pronóstico ML para: **{ticker_input}**")
+    
+    if ticker_input not in MOCK_DATABASE:
+        st.error(f"Ticker {ticker_input} no disponible. Usa: {', '.join(MOCK_DATABASE.keys())}")
+    else:
+        if ejecutar_analisis or 'pronostico_cache' not in st.session_state:
+            with st.spinner(" Ejecutando modelo de Machine Learning..."):
+                try:
+                    pronostico = pronosticar_precio(ticker_input, dias_pronostico)
+                    st.session_state.pronostico_cache = pronostico
+                    st.session_state.error_pronostico = None
+                except Exception as e:
+                    st.session_state.pronostico_cache = None
+                    st.session_state.error_pronostico = f"Error en pronóstico: {str(e)}"
+        
+        if st.session_state.get('error_pronostico'):
+            st.error(st.session_state.error_pronostico)
+        elif st.session_state.pronostico_cache:
+            pron = st.session_state.pronostico_cache
+            
+            st.warning("""
+            ⚠️ **Modo Demostración**: Pronóstico basado en modelo de regresión con datos simulados. 
+            En producción se usará Prophet de Meta con datos reales.
+            """)
+            
+            # Métricas del pronóstico
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Precio Actual", f"${pron['historico']['Precio'].iloc[-1]:.2f}")
+            
+            with col2:
+                cambio_30d = pron['cambio_30d']
+                st.metric("Cambio 30 días", f"{cambio_30d:.1f}%", delta="↗️" if cambio_30d > 0 else "↘️")
+            
+            with col3:
+                cambio_pron = pron['cambio_pronostico']
+                st.metric(f"Pronóstico {pron['dias_pronostico']}d", f"{cambio_pron:.1f}%", delta="↗️" if cambio_pron > 0 else "↘️")
+            
+            with col4:
+                st.metric("Volatilidad Diaria", f"{pron['volatilidad_diaria']:.2f}%")
+            
+            st.divider()
+            
+            # Gráfico de pronóstico
+            st.subheader(f"📈 Pronóstico a {pron['dias_pronostico']} días para {ticker_input}")
+            
+            fig = go.Figure()
+            
+            # Histórico
+            fig.add_trace(go.Scatter(
+                x=pron['historico']['Fecha'],
+                y=pron['historico']['Precio'],
+                mode='lines',
+                name='Histórico',
+                line=dict(color='blue', width=2)
+            ))
+            
+            # Pronóstico
+            fechas_futuras = pd.date_range(
+                start=pron['historico']['Fecha'].iloc[-1],
+                periods=pron['dias_pronostico'] + 1,
+                freq='D'
+            )[1:]
+            
+            fig.add_trace(go.Scatter(
+                x=fechas_futuras,
+                y=pron['precios_pronosticados'],
+                mode='lines',
+                name='Pronóstico',
+                line=dict(color='orange', width=3, dash='dash')
+            ))
+            
+            # Banda superior
+            fig.add_trace(go.Scatter(
+                x=fechas_futuras,
+                y=pron['limite_superior'],
+                mode='lines',
+                name='Límite Superior (95%)',
+                line=dict(width=0),
+                showlegend=True
+            ))
+            
+            # Banda inferior
+            fig.add_trace(go.Scatter(
+                x=fechas_futuras,
+                y=pron['limite_inferior'],
+                mode='lines',
+                name='Límite Inferior (95%)',
+                line=dict(width=0),
+                fill='tonexty',
+                fillcolor='rgba(255, 165, 0, 0.2)',
+                showlegend=True
+            ))
+            
+            fig.update_layout(
+                title=f'Pronóstico de Precio con Bandas de Confianza (95%)',
+                xaxis_title='Fecha',
+                yaxis_title='Precio (USD)',
+                hovermode='x unified',
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.divider()
+            
+            # Análisis de tendencia
+            st.subheader("📊 Análisis de Tendencia")
+            
+            col_a, col_b = st.columns(2)
+            
+            with col_a:
+                st.markdown(f"""
+                ### Tendencia Detectada: **{pron['tendencia']}**
+                
+                El modelo de regresión lineal indica una tendencia **{pron['tendencia'].lower()}** 
+                basada en los últimos 365 días de datos históricos.
+                
+                **Interpretación:**
+                - Si la tendencia es alcista, se espera que el precio continúe subiendo
+                - Si es bajista, se espera una corrección a la baja
+                """)
+            
+            with col_b:
+                st.markdown(f"""
+                ### Bandas de Confianza (95%)
+                
+                Las bandas naranja muestran el rango donde el precio tiene **95% de probabilidad** 
+                de estar en cada fecha futura.
+                
+                **Interpretación:**
+                - Banda más estrecha = Mayor certeza
+                - Banda más amplia = Mayor incertidumbre
+                - La incertidumbre crece con el tiempo
+                """)
+            
+            st.divider()
+            
+            # Veredicto ML
+            st.subheader("🎯 Veredicto del Modelo ML")
+            
+            if pron['cambio_pronostico'] > 10:
+                st.success(f"""
+                ###  SEÑAL ALCISTA FUERTE
+                El modelo predice un crecimiento del **{pron['cambio_pronostico']:.1f}%** en {pron['dias_pronostico']} días.
+                
+                **Recomendación:** Considerar posición larga con stop-loss en el límite inferior de la banda de confianza.
+                """)
+            elif pron['cambio_pronostico'] > 0:
+                st.info(f"""
+                ### 📈 SEÑAL ALCISTA MODERADA
+                El modelo predice un crecimiento del **{pron['cambio_pronostico']:.1f}%** en {pron['dias_pronostico']} días.
+                
+                **Recomendación:** Mantener posiciones actuales. No agregar exposición significativa.
+                """)
+            elif pron['cambio_pronostico'] > -10:
+                st.warning(f"""
+                ### 📉 SEÑAL BAJISTA MODERADA
+                El modelo predice una caída del **{abs(pron['cambio_pronostico']):.1f}%** en {pron['dias_pronostico']} días.
+                
+                **Recomendación:** Reducir exposición. Considerar tomar ganancias parciales.
+                """)
+            else:
+                st.error(f"""
+                ### 📉 SEÑAL BAJISTA FUERTE
+                El modelo predice una caída del **{abs(pron['cambio_pronostico']):.1f}%** en {pron['dias_pronostico']} días.
+                
+                **Recomendación:** Evitar nuevas posiciones. Considerar salir de posiciones existentes.
+                """)
+        
+        else:
+            st.markdown("""
+            ### 👈 Haz clic en "Analizar Ahora" para generar el pronóstico
+            
+            El modelo generará:
+            - Pronóstico a 30/60/90/180 días
+            - Bandas de confianza del 95%
+            - Análisis de tendencia
+            - Señal de compra/venta
+            """)
 
 # ==============================================================================
 # PIE DE PÁGINA
@@ -491,11 +709,12 @@ else:  # Modo Portafolio
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.9em;'>
-    <p>QuantBuffett AI v0.4.0 | Desarrollado con Streamlit + Python + Plotly</p>
+    <p>QuantBuffett AI v0.5.0 | Desarrollado con Streamlit + Python + Plotly + NumPy</p>
     <p><em>"Es mucho mejor comprar una empresa maravillosa a un precio justo, 
     que una empresa justa a un precio maravilloso." - Warren Buffett</em></p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
 
