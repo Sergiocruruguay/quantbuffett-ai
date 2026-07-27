@@ -720,7 +720,72 @@ else:
         with col2:
             if st.button("️", key=f"rm_{ticker}"):
                 st.session_state.watchlist.remove(ticker)
-                st.rerun()
+                st.rerun() 
+                # ==============================================================================
+# DEBUG: Ver datos crudos de yfinance
+# ==============================================================================
+st.sidebar.divider()
+st.sidebar.subheader(" Debug yfinance")
+
+if st.sidebar.button("🔍 Ver datos crudos de AAPL"):
+    with st.spinner("Obteniendo datos crudos..."):
+        stock_debug = yf.Ticker("AAPL")
+        info_debug = stock_debug.info
+        
+        st.sidebar.markdown("### 📊 Datos Crudos de AAPL")
+        
+        # Datos de mercado
+        st.sidebar.markdown("**Datos de Mercado:**")
+        st.sidebar.write(f"• currentPrice: {info_debug.get('currentPrice')}")
+        st.sidebar.write(f"• regularMarketPrice: {info_debug.get('regularMarketPrice')}")
+        st.sidebar.write(f"• marketCap: {info_debug.get('marketCap')}")
+        st.sidebar.write(f"• sharesOutstanding: {info_debug.get('sharesOutstanding')}")
+        st.sidebar.write(f"• floatShares: {info_debug.get('floatShares')}")
+        
+        # Datos de dividendos
+        st.sidebar.markdown("**Datos de Dividendos:**")
+        st.sidebar.write(f"• dividendRate: {info_debug.get('dividendRate')}")
+        st.sidebar.write(f"• dividendYield: {info_debug.get('dividendYield')}")
+        st.sidebar.write(f"• trailingAnnualDividendRate: {info_debug.get('trailingAnnualDividendRate')}")
+        st.sidebar.write(f"• trailingAnnualDividendYield: {info_debug.get('trailingAnnualDividendYield')}")
+        st.sidebar.write(f"• fiveYearAvgDividendYield: {info_debug.get('fiveYearAvgDividendYield')}")
+        
+        # Datos de rentabilidad
+        st.sidebar.markdown("**Datos de Rentabilidad:**")
+        st.sidebar.write(f"• returnOnEquity: {info_debug.get('returnOnEquity')}")
+        st.sidebar.write(f"• returnOnAssets: {info_debug.get('returnOnAssets')}")
+        st.sidebar.write(f"• returnOnInvestedCapital: {info_debug.get('returnOnInvestedCapital')}")
+        
+        # Calcular market cap manualmente
+        price = info_debug.get('currentPrice') or info_debug.get('regularMarketPrice') or 0
+        shares = info_debug.get('sharesOutstanding') or 0
+        if price > 0 and shares > 0:
+            market_cap_calc = price * shares
+            st.sidebar.markdown(f"**Cálculo manual:**")
+            st.sidebar.write(f"• Price × Shares = {price} × {shares} = {market_cap_calc}")
+            st.sidebar.write(f"• En billones: ${market_cap_calc/1e9:.1f}B")
+            st.sidebar.write(f"• En trillones: ${market_cap_calc/1e12:.2f}T")
+        
+        # Dividendos históricos
+        st.sidebar.markdown("**Dividendos Históricos (últimos 10):**")
+        dividends = stock_debug.dividends
+        if not dividends.empty:
+            st.sidebar.write(dividends.tail(10))
+        else:
+            st.sidebar.write("Sin dividendos históricos")
+        
+        # Histórico de precios
+        st.sidebar.markdown("**Histórico de Precios (1 año):**")
+        hist = stock_debug.history(period='1y')
+        if not hist.empty:
+            st.sidebar.write(f"• Primer precio: ${hist['Close'].iloc[0]:.2f}")
+            st.sidebar.write(f"• Último precio: ${hist['Close'].iloc[-1]:.2f}")
+            retorno = ((hist['Close'].iloc[-1] / hist['Close'].iloc[0]) - 1) * 100
+            st.sidebar.write(f"• Retorno 1 año: {retorno:.2f}%")
+            st.sidebar.write(f"• Cantidad de días: {len(hist)}")
+        
+        st.sidebar.success("✅ Debug completado. Copia estos datos para análisis.")
+
 
 st.sidebar.divider()
 
