@@ -109,7 +109,7 @@ def calcular_market_cap_real(stock, price):
     except:
         return None
 
-def def calcular_dividend_yield_real(stock, price):
+def calcular_dividend_yield_real(stock, price):
     """Calcula Dividend Yield corrigiendo formato de Yahoo Finance."""
     try:
         div_yield = stock.info.get('dividendYield', 0) or 0
