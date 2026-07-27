@@ -94,99 +94,103 @@ def calcular_deuda_ebitda_desde_estados(stock):
         return None
 
 def calcular_market_cap_real(stock, price):
-    """Calcula Market Cap real como precio × acciones en circulación."""
+    """Calcula Market Cap usando múltiples métodos de validación."""
     try:
+        # Método 1: Usar marketCap directo de info (ya viene calculado)
+        market_cap_info = stock.info.get('marketCap', 0) or 0
+        
+        if market_cap_info > 0:
+            # Validar: si es razonable (entre $1B y $10T), usarlo
+            if 1e9 <= market_cap_info <= 10e12:
+                return market_cap_info
+        
+        # Método 2: Calcular manualmente con validación estricta
         shares = stock.info.get('sharesOutstanding', 0) or 0
         
         if shares > 0 and price > 0:
-            market_cap = price * shares
+            market_cap_calc = price * shares
             
-            # Validación: si el market cap calculado es irrealmente grande,
-            # shares probablemente viene en miles o millones
-            if market_cap > 1e15:  # > $1,500 trillones (imposible)
-                return market_cap / 1e6  # Asumir que shares está en millones
-            elif market_cap > 1e12:  # > $1 trillón
-                # Para empresas grandes como AAPL, MSFT: market cap real ~$3T
-                # Si el cálculo da >$10T, shares está en miles
-                if market_cap > price * 1e9:
-                    return market_cap / 1e3
-            return market_cap
+            # Si el cálculo da un valor irreal, ajustar
+            if market_cap_calc > 10e12:  # > $10 trillones
+                # Probablemente shares está en miles
+                return market_cap_calc / 1000
+            elif market_cap_calc > 1e12:  # > $1 trillón
+                return market_cap_calc
+            elif market_cap_calc > 1e9:  # > $1 mil millones
+                return market_cap_calc
         
         return None
     except:
         return None
 
 def calcular_dividend_yield_real(stock, price):
-    """Calcula Dividend Yield real usando múltiples fuentes."""
+    """Calcula Dividend Yield usando múltiples fuentes con fallback."""
     try:
-        # Intento 1: Usar dividendos históricos
-        dividends = stock.dividends
-        
-        if not dividends.empty:
-            one_year_ago = datetime.now() - pd.DateOffset(years=1)
-            recent_dividends = dividends[dividends.index >= one_year_ago]
-            
-            if not recent_dividends.empty and price > 0:
-                dividendos_anuales = recent_dividends.sum()
-                dividend_yield = (dividendos_anuales / price) * 100
-                
-                if 0 < dividend_yield < 20:
-                    return dividend_yield
-        
-        # Intento 2: Usar dividendRate de info
+        # Intento 1: dividendRate (dividendo anual esperado)
         div_rate = stock.info.get('dividendRate', 0) or 0
         if div_rate > 0 and price > 0:
-            dividend_yield = (div_rate / price) * 100
-            if 0 < dividend_yield < 20:
-                return dividend_yield
+            yield_calc = (div_rate / price) * 100
+            if 0 < yield_calc < 15:  # Ninguna empresa paga >15%
+                return yield_calc
         
-        # Intento 3: Usar trailingAnnualDividendRate
+        # Intento 2: trailingAnnualDividendRate (dividendo del último año)
         trailing_rate = stock.info.get('trailingAnnualDividendRate', 0) or 0
         if trailing_rate > 0 and price > 0:
-            dividend_yield = (trailing_rate / price) * 100
-            if 0 < dividend_yield < 20:
-                return dividend_yield
+            yield_calc = (trailing_rate / price) * 100
+            if 0 < yield_calc < 15:
+                return yield_calc
         
+        # Intento 3: Calcular desde dividendos históricos
+        dividends = stock.dividends
+        if not dividends.empty and price > 0:
+            # Últimos 4 trimestres
+            recent = dividends.tail(4)
+            if len(recent) >= 3:  # Al menos 3 pagos
+                dividendos_anuales = recent.sum()
+                yield_calc = (dividendos_anuales / price) * 100
+                if 0 < yield_calc < 15:
+                    return yield_calc
+        
+        # Si todo falla, retornar 0
         return 0.0
     except:
         return 0.0
 
 def calcular_retorno_anual_real(stock):
-    """Calcula retorno anual real con validación robusta."""
+    """Calcula retorno anual con validación robusta contra outliers."""
     try:
-        # Intento 1: Último año
-        hist_1y = stock.history(period='1y')
+        # Obtener histórico de 2 años para tener más contexto
+        hist = stock.history(period='2y')
         
-        if len(hist_1y) >= 100:
-            precio_inicial = hist_1y['Close'].iloc[0]
-            precio_final = hist_1y['Close'].iloc[-1]
+        if len(hist) < 200:
+            return None
+        
+        # Calcular retorno del último año
+        precio_1y_atras = hist['Close'].iloc[-252] if len(hist) >= 252 else hist['Close'].iloc[0]
+        precio_actual = hist['Close'].iloc[-1]
+        
+        if precio_1y_atras <= 0 or precio_actual <= 0:
+            return None
+        
+        retorno_1y = (precio_actual / precio_1y_atras) - 1
+        
+        # Validación estricta: -20% a +60%
+        if -0.20 <= retorno_1y <= 0.60:
+            return retorno_1y
+        
+        # Si está fuera de rango, usar retorno de 6 meses anualizado
+        precio_6m_atras = hist['Close'].iloc[-126] if len(hist) >= 126 else hist['Close'].iloc[0]
+        if precio_6m_atras > 0:
+            retorno_6m = (precio_actual / precio_6m_atras) - 1
+            retorno_anualizado = (1 + retorno_6m) ** 2 - 1
             
-            if precio_inicial > 0 and precio_final > 0:
-                retorno_1y = (precio_final / precio_inicial) - 1
-                
-                # Si el retorno está en rango razonable, usarlo
-                if -0.30 <= retorno_1y <= 0.80:
-                    return retorno_1y
+            if -0.20 <= retorno_anualizado <= 0.60:
+                return retorno_anualizado
         
-        # Intento 2: Últimos 6 meses anualizado
-        hist_6m = stock.history(period='6mo')
-        
-        if len(hist_6m) >= 50:
-            precio_inicial = hist_6m['Close'].iloc[0]
-            precio_final = hist_6m['Close'].iloc[-1]
-            
-            if precio_inicial > 0 and precio_final > 0:
-                retorno_6m = (precio_final / precio_inicial) - 1
-                retorno_anualizado = (1 + retorno_6m) ** 2 - 1
-                
-                if -0.30 <= retorno_anualizado <= 0.80:
-                    return retorno_anualizado
-        
-        # Si todo falla, retornar None (usará fallback de 15%)
+        # Si todo falla, retornar None
         return None
     except:
         return None
-
 def calcular_volatilidad_anual_real(stock):
     """Calcula volatilidad anual real usando desviación estándar."""
     try:
