@@ -1,6 +1,6 @@
 """
 QuantBuffett AI - Plataforma Profesional de Análisis Financiero
-Versión: 1.0.0-rc2 | Con Debug Alpha Vantage
+Versión: 1.1.0 | Paso 7: Exportación de Reportes PDF
 """
 
 import streamlit as st
@@ -12,6 +12,9 @@ from datetime import datetime, timedelta
 from scipy.optimize import minimize
 import requests
 import time
+import os
+import tempfile
+from fpdf import FPDF
 
 # ==============================================================================
 # CONFIGURACIÓN INICIAL
@@ -27,11 +30,11 @@ st.set_page_config(
 ALPHA_VANTAGE_KEY = st.secrets.get("ALPHA_VANTAGE_KEY", "5IPGMO6N5R7UB9VC")
 
 # ==============================================================================
-# DATOS MOCK - SOLO COMO RESPALDO
+# DATOS MOCK - SOLO COMO ÚLTIMO RECURSO
 # ==============================================================================
 MOCK_DATABASE = {
     'AAPL': {
-        'ticker': 'AAPL', 'precio': 308.50, 'market_cap': 2400000000000,
+        'ticker': 'AAPL', 'precio': 327.74, 'market_cap': 2500000000000,
         'roic': 55.2, 'deuda_ebitda': 0.35, 'fcf': 105.8,
         'net_income': 112000000000, 'ebit': 130000000000,
         'margen_seguridad': -4.3, 'beta': 1.10, 'pe_ratio': 28.5,
@@ -49,7 +52,7 @@ MOCK_DATABASE = {
         'retorno_anual': 0.32, 'volatilidad_anual': 0.22, 'tendencia': 'Alcista'
     },
     'KO': {
-        'ticker': 'KO', 'precio': 62.30, 'market_cap': 270000000000,
+        'ticker': 'KO', 'precio': 81.97, 'market_cap': 355000000000,
         'roic': 16.6, 'deuda_ebitda': 1.50, 'fcf': 9.8,
         'net_income': 10500000000, 'ebit': 13000000000,
         'margen_seguridad': 12.5, 'beta': 0.65, 'pe_ratio': 24.1,
@@ -67,7 +70,7 @@ MOCK_DATABASE = {
         'retorno_anual': 0.25, 'volatilidad_anual': 0.28, 'tendencia': 'Alcista'
     },
     'WMT': {
-        'ticker': 'WMT', 'precio': 85.40, 'market_cap': 230000000000,
+        'ticker': 'WMT', 'precio': 85.40, 'market_cap': 690000000000,
         'roic': 14.2, 'deuda_ebitda': 1.85, 'fcf': 12.5,
         'net_income': 15000000000, 'ebit': 22000000000,
         'margen_seguridad': 5.8, 'beta': 0.55, 'pe_ratio': 28.5,
@@ -155,29 +158,20 @@ def obtener_datos_alpha_vantage(ticker: str) -> dict:
 def obtener_datos_financieros(ticker: str) -> dict:
     """Obtiene datos financieros. SIEMPRE prioriza Alpha Vantage."""
     ticker_upper = ticker.upper()
-    
-    # SIEMPRE intentar Alpha Vantage primero, incluso si existe en MOCK_DATABASE
     datos_reales = obtener_datos_alpha_vantage(ticker_upper)
     
     if datos_reales and datos_reales.get('precio', 0) > 0:
-        # ACTUALIZAR MOCK_DATABASE con datos reales
         mock_existente = MOCK_DATABASE.get(ticker_upper, {})
-        
-        # Combinar: datos reales + campos que Alpha Vantage no proporciona
         datos_combinados = {
-            **datos_reales,  # Datos reales de Alpha Vantage
+            **datos_reales,
             'deuda_ebitda': mock_existente.get('deuda_ebitda', 1.0),
             'fcf': mock_existente.get('fcf', 0),
             'margen_seguridad': mock_existente.get('margen_seguridad', 0),
             'ebit': mock_existente.get('ebit', 0),
         }
-        
-        # Actualizar MOCK_DATABASE con datos combinados
         MOCK_DATABASE[ticker_upper] = datos_combinados
-        
         return datos_combinados
     
-    # Fallback a mock solo si Alpha Vantage falla
     if ticker_upper in MOCK_DATABASE:
         datos = MOCK_DATABASE[ticker_upper].copy()
         datos['es_real'] = False
@@ -192,9 +186,7 @@ def obtener_datos_financieros(ticker: str) -> dict:
 def generar_historico_simulado(ticker: str, precio_actual: float, volatilidad: float, dias: int = 365) -> pd.DataFrame:
     """Genera datos históricos simulados realistas."""
     np.random.seed(42)
-    
     fechas = pd.date_range(end=datetime.now(), periods=dias, freq='D')
-    
     retornos_diarios = np.random.normal(0.0008, volatilidad / np.sqrt(252), dias)
     precios = [precio_actual]
     
@@ -205,13 +197,11 @@ def generar_historico_simulado(ticker: str, precio_actual: float, volatilidad: f
     
     precios.reverse()
     
-    df = pd.DataFrame({
+    return pd.DataFrame({
         'Fecha': fechas,
         'Precio': precios,
         'Volumen': np.random.randint(1000000, 50000000, dias)
     })
-    
-    return df
 
 def pronosticar_precio(ticker: str, dias_pronostico: int = 90) -> dict:
     """Pronóstico de precio usando regresión lineal + bandas de confianza."""
@@ -264,93 +254,74 @@ def analizar_riesgos_ia(ticker: str) -> dict:
     
     riesgos = []
     
-    # 1. Riesgo Financiero (Deuda)
+    # 1. Riesgo Financiero
     deuda_ebitda = datos.get('deuda_ebitda', 1.0)
     if deuda_ebitda > 3.0:
-        severidad = 90
-        nivel = "Crítico"
+        severidad, nivel = 90, "Crítico"
     elif deuda_ebitda > 2.0:
-        severidad = 70
-        nivel = "Alto"
+        severidad, nivel = 70, "Alto"
     elif deuda_ebitda > 1.0:
-        severidad = 50
-        nivel = "Moderado"
+        severidad, nivel = 50, "Moderado"
     else:
-        severidad = 20
-        nivel = "Bajo"
+        severidad, nivel = 20, "Bajo"
     
     riesgos.append({
         'categoria': 'Financiero',
         'descripcion': f"Ratio Deuda/EBITDA de {deuda_ebitda:.2f}x",
-        'severidad': severidad,
-        'nivel': nivel,
+        'severidad': severidad, 'nivel': nivel,
         'mitigacion': 'Reducir deuda mediante generación de caja libre' if deuda_ebitda > 2 else 'Mantener política de deuda conservadora'
     })
     
-    # 2. Riesgo de Rentabilidad (ROIC)
+    # 2. Riesgo Operativo (ROIC)
     roic = datos.get('roic', 15)
     if roic < 10:
-        severidad = 85
-        nivel = "Crítico"
+        severidad, nivel = 85, "Crítico"
     elif roic < 15:
-        severidad = 60
-        nivel = "Alto"
+        severidad, nivel = 60, "Alto"
     elif roic < 25:
-        severidad = 40
-        nivel = "Moderado"
+        severidad, nivel = 40, "Moderado"
     else:
-        severidad = 15
-        nivel = "Bajo"
+        severidad, nivel = 15, "Bajo"
     
     riesgos.append({
         'categoria': 'Operativo',
         'descripcion': f"ROIC del {roic:.1f}%",
-        'severidad': severidad,
-        'nivel': nivel,
+        'severidad': severidad, 'nivel': nivel,
         'mitigacion': 'Optimizar asignación de capital' if roic < 15 else 'Continuar con estrategia de crecimiento rentable'
     })
     
-    # 3. Riesgo de Valoración (Margen de Seguridad)
+    # 3. Riesgo de Mercado
     margen = datos.get('margen_seguridad', 0)
     if margen < -20:
-        severidad = 80
-        nivel = "Crítico"
+        severidad, nivel = 80, "Crítico"
     elif margen < 0:
-        severidad = 60
-        nivel = "Alto"
+        severidad, nivel = 60, "Alto"
     elif margen < 15:
-        severidad = 40
-        nivel = "Moderado"
+        severidad, nivel = 40, "Moderado"
     else:
-        severidad = 20
-        nivel = "Bajo"
+        severidad, nivel = 20, "Bajo"
     
     riesgos.append({
         'categoria': 'Mercado',
         'descripcion': f"Margen de seguridad del {margen:.1f}%",
-        'severidad': severidad,
-        'nivel': nivel,
+        'severidad': severidad, 'nivel': nivel,
         'mitigacion': 'Esperar corrección del mercado' if margen < 0 else 'Precio actual ofrece protección adecuada'
     })
     
-    # 4. Riesgo de Volatilidad (Beta)
+    # 4. Riesgo Sistemático
     beta = datos.get('beta', 1.0)
     if beta > 1.5:
-        severidad = 75
-        nivel = "Alto"
+        severidad, nivel = 75, "Alto"
     elif beta > 1.0:
-        severidad = 50
-        nivel = "Moderado"
+        severidad, nivel = 50, "Moderado"
     else:
-        severidad = 25
-        nivel = "Bajo"
+        severidad, nivel = 25, "Bajo"
     
     riesgos.append({
         'categoria': 'Sistemático',
         'descripcion': f"Beta de {beta:.2f}",
-        'severidad': severidad,
-        'nivel': nivel,
-        'mitigacion': 'Diversificar portafolio para reducir exposición sistemática' if beta > 1.5 else 'Beta dentro de rangos aceptables'
+        'severidad': severidad, 'nivel': nivel,
+        'mitigacion': 'Diversificar portafolio' if beta > 1.5 else 'Beta dentro de rangos aceptables'
     })
     
     # 5. Riesgo Sectorial
@@ -368,26 +339,25 @@ def analizar_riesgos_ia(ticker: str) -> dict:
     riesgos.append({
         'categoria': 'Sectorial',
         'descripcion': riesgo_sectorial['descripcion'],
-        'severidad': riesgo_sectorial['severidad'],
-        'nivel': riesgo_sectorial['nivel'],
-        'mitigacion': 'Diversificar entre sectores para reducir concentración'
+        'severidad': riesgo_sectorial['severidad'], 'nivel': riesgo_sectorial['nivel'],
+        'mitigacion': 'Diversificar entre sectores'
     })
     
-    # Score consolidado
     score_riesgo = np.mean([r['severidad'] for r in riesgos])
     
-    if score_riesgo > 70:
-        perfil_riesgo = "Alto Riesgo"
-        recomendacion = "No recomendado para inversores conservadores"
-    elif score_riesgo > 50:
-        perfil_riesgo = "Riesgo Moderado-Alto"
-        recomendacion = "Apto para inversores con tolerancia al riesgo"
-    elif score_riesgo > 30:
+    # CORRECCIÓN: Lógica de perfil de riesgo
+    if score_riesgo < 30:
+        perfil_riesgo = "Bajo Riesgo - Conservador"
+        recomendacion = "Perfil conservador. Ideal para preservación de capital. Apto para inversores estilo Buffett."
+    elif score_riesgo < 50:
         perfil_riesgo = "Riesgo Moderado"
-        recomendacion = "Balance adecuado entre riesgo y retorno"
+        recomendacion = "Balance adecuado entre riesgo y retorno. Apto para la mayoría de inversores."
+    elif score_riesgo < 70:
+        perfil_riesgo = "Riesgo Moderado-Alto"
+        recomendacion = "Requiere diversificación. Apto para inversores con tolerancia al riesgo."
     else:
-        perfil_riesgo = "Bajo Riesgo"
-        recomendacion = "Perfil conservador. Ideal para preservación de capital"
+        perfil_riesgo = "Alto Riesgo - Agresivo"
+        recomendacion = "No recomendado para inversores conservadores. Solo perfiles agresivos."
     
     return {
         'ticker': ticker,
@@ -420,11 +390,7 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04, modo: str = "simple") 
         return -sharpe
     
     restricciones = {'type': 'eq', 'fun': lambda x: np.sum(x) - 1.0}
-    
-    if modo == "avanzado":
-        limites = tuple((0.0, 0.40) for _ in range(n))
-    else:
-        limites = tuple((0.0, 1.0) for _ in range(n))
+    limites = tuple((0.0, 1.0) for _ in range(n))
     
     pesos_iniciales = np.ones(n) / n
     resultado = minimize(sharpe_negativo, pesos_iniciales, 
@@ -435,10 +401,7 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04, modo: str = "simple") 
     volatilidad_optima = np.sqrt(np.dot(pesos_optimos.T, np.dot(cov_matrix, pesos_optimos)))
     sharpe_optimo = (retorno_optimo - rf) / volatilidad_optima
     
-    mc_retornos = []
-    mc_vols = []
-    mc_sharpes = []
-    
+    mc_retornos, mc_vols, mc_sharpes = [], [], []
     for _ in range(1000):
         pesos_rand = np.random.random(n)
         pesos_rand /= np.sum(pesos_rand)
@@ -449,34 +412,232 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04, modo: str = "simple") 
         mc_vols.append(v * 100)
         mc_sharpes.append(s)
     
-    matriz_correlacion = correlacion if modo == "avanzado" else None
-    
     return {
         'tickers': tickers,
         'pesos': pesos_optimos,
         'retorno': retorno_optimo * 100,
         'volatilidad': volatilidad_optima * 100,
         'sharpe': sharpe_optimo,
-        'mc_data': {
-            'retornos': mc_retornos,
-            'volatilidades': mc_vols,
-            'sharpes': mc_sharpes
-        },
-        'correlacion': matriz_correlacion
+        'mc_data': {'retornos': mc_retornos, 'volatilidades': mc_vols, 'sharpes': mc_sharpes},
+        'correlacion': correlacion
     }
 
-def calcular_rebalanceo(portafolio_actual: dict, portafolio_optimo: dict, capital: float) -> pd.DataFrame:
-    """Calcula qué comprar/vender para rebalancear."""
-    df = pd.DataFrame()
-    df['Activo'] = portafolio_optimo['tickers']
-    df['Peso_Actual'] = [portafolio_actual.get(t, 0) for t in portafolio_optimo['tickers']]
-    df['Peso_Optimo'] = portafolio_optimo['pesos'] * 100
-    df['Diferencia'] = df['Peso_Optimo'] - df['Peso_Actual']
-    df['Capital_Ajustar'] = df['Diferencia'] * capital / 100
-    df['Accion'] = df['Diferencia'].apply(
-        lambda x: "🟢 COMPRAR" if x > 1 else "🔴 VENDER" if x < -1 else "✅ MANTENER"
-    )
-    return df
+# ==============================================================================
+# GENERADOR DE PDF
+# ==============================================================================
+class PDFReport(FPDF):
+    """Generador de reportes PDF profesionales."""
+    
+    def header(self):
+        self.set_font('Helvetica', 'B', 16)
+        self.set_text_color(26, 54, 93)
+        self.cell(0, 10, 'QuantBuffett AI', 0, 1, 'L')
+        self.set_font('Helvetica', '', 10)
+        self.set_text_color(100, 100, 100)
+        self.cell(0, 5, 'Plataforma Profesional de Análisis Financiero', 0, 1, 'L')
+        self.ln(5)
+        self.set_draw_color(26, 54, 93)
+        self.line(10, self.get_y(), 200, self.get_y())
+        self.ln(5)
+    
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Helvetica', 'I', 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, f'Página {self.page_no()}/{{nb}}', 0, 0, 'C')
+    
+    def section_title(self, title):
+        self.set_font('Helvetica', 'B', 14)
+        self.set_text_color(26, 54, 93)
+        self.cell(0, 10, title, 0, 1, 'L')
+        self.ln(2)
+    
+    def metric_row(self, label, value, color=None):
+        self.set_font('Helvetica', '', 10)
+        self.set_text_color(80, 80, 80)
+        self.cell(90, 8, label, 0, 0, 'L')
+        if color:
+            self.set_text_color(*color)
+        else:
+            self.set_text_color(0, 0, 0)
+        self.set_font('Helvetica', 'B', 10)
+        self.cell(0, 8, str(value), 0, 1, 'R')
+
+
+def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict) -> str:
+    """Genera PDF de análisis de activo individual."""
+    pdf = PDFReport()
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    
+    # Portada
+    pdf.set_font('Helvetica', 'B', 24)
+    pdf.set_text_color(26, 54, 93)
+    pdf.cell(0, 20, f'Análisis: {ticker}', 0, 1, 'C')
+    
+    pdf.set_font('Helvetica', '', 12)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 10, f'Fecha: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
+    pdf.cell(0, 10, f'Fuente: {datos.get("fuente", "N/A")}', 0, 1, 'C')
+    pdf.ln(10)
+    
+    # Métricas Fundamentales
+    pdf.section_title(' Métricas Fundamentales')
+    pdf.metric_row('Precio Actual:', f'${datos["precio"]:.2f}')
+    pdf.metric_row('P/E Ratio:', f'{datos.get("pe_ratio", 0):.1f}x')
+    pdf.metric_row('EPS:', f'${datos.get("eps", 0):.2f}')
+    pdf.metric_row('Beta:', f'{datos.get("beta", 1):.2f}')
+    pdf.metric_row('ROIC:', f'{datos.get("roic", 0):.1f}%')
+    pdf.metric_row('Deuda/EBITDA:', f'{datos.get("deuda_ebitda", 0):.2f}x')
+    pdf.metric_row('Market Cap:', f'${datos.get("market_cap", 0)/1e9:.1f}B')
+    pdf.metric_row('Dividend Yield:', f'{datos.get("dividend_yield", 0)*100:.2f}%')
+    pdf.ln(5)
+    
+    # Pronóstico
+    pdf.section_title(' Pronóstico a 90 Días')
+    pdf.metric_row('Cambio 30 días:', f'{pronostico["cambio_30d"]:.1f}%')
+    pdf.metric_row('Pronóstico 90 días:', f'{pronostico["cambio_pronostico"]:.1f}%')
+    pdf.metric_row('Tendencia:', pronostico['tendencia'])
+    pdf.metric_row('Volatilidad diaria:', f'{pronostico["volatilidad_diaria"]:.2f}%')
+    pdf.ln(5)
+    
+    # Análisis de Riesgos
+    pdf.section_title('🛡️ Análisis de Riesgos')
+    pdf.metric_row('Score de Riesgo:', f'{riesgos["score_riesgo"]}/100')
+    pdf.metric_row('Perfil:', riesgos['perfil_riesgo'])
+    pdf.ln(3)
+    
+    pdf.set_font('Helvetica', 'B', 11)
+    pdf.cell(0, 8, 'Riesgos Identificados:', 0, 1)
+    
+    for i, riesgo in enumerate(riesgos['riesgos'], 1):
+        pdf.set_font('Helvetica', '', 9)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(0, 6, f'{i}. {riesgo["categoria"]} - {riesgo["nivel"]} ({riesgo["severidad"]}/100)', 0, 1)
+        pdf.set_font('Helvetica', 'I', 8)
+        pdf.set_text_color(80, 80, 80)
+        pdf.cell(0, 5, f'   {riesgo["descripcion"]}', 0, 1)
+    
+    pdf.ln(5)
+    
+    # Veredicto
+    pdf.section_title('🎯 Veredicto Final')
+    pdf.set_font('Helvetica', '', 10)
+    pdf.set_text_color(0, 0, 0)
+    
+    if riesgos['score_riesgo'] < 30:
+        veredicto = "PERFIL CONSERVADOR - APTO PARA INVERSIÓN DE VALOR"
+    elif riesgos['score_riesgo'] < 50:
+        veredicto = "PERFIL BALANCEADO - ACEPTABLE CON DIVERSIFICACIÓN"
+    else:
+        veredicto = "PERFIL AGRESIVO - REQUIERE ANÁLISIS PROFUNDO"
+    
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.cell(0, 10, veredicto, 0, 1, 'C')
+    pdf.ln(3)
+    pdf.set_font('Helvetica', '', 10)
+    pdf.multi_cell(0, 6, riesgos['recomendacion'])
+    
+    pdf.ln(10)
+    
+    # Disclaimer
+    pdf.set_draw_color(200, 200, 200)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+    pdf.set_font('Helvetica', 'I', 7)
+    pdf.set_text_color(128, 128, 128)
+    pdf.multi_cell(0, 4, 'DISCLAIMER: Este reporte es generado automáticamente con fines informativos. No constituye asesoramiento financiero. Los datos pueden tener demora o ser estimaciones. Consulte con un asesor financiero profesional antes de tomar decisiones de inversión.')
+    
+    # Guardar PDF
+    temp_path = tempfile.mktemp(suffix='.pdf')
+    pdf.output(temp_path)
+    
+    return temp_path
+
+
+def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> str:
+    """Genera PDF de análisis de portafolio."""
+    pdf = PDFReport()
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    
+    # Portada
+    pdf.set_font('Helvetica', 'B', 24)
+    pdf.set_text_color(26, 54, 93)
+    pdf.cell(0, 20, 'Análisis de Portafolio', 0, 1, 'C')
+    
+    pdf.set_font('Helvetica', '', 12)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 10, f'Fecha: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
+    pdf.cell(0, 10, f'Activos: {", ".join(tickers)}', 0, 1, 'C')
+    pdf.cell(0, 10, f'Capital: ${capital:,.0f}', 0, 1, 'C')
+    pdf.ln(10)
+    
+    # Métricas del Portafolio
+    pdf.section_title(' Métricas del Portafolio Óptimo')
+    pdf.metric_row('Retorno Anual Esperado:', f'{opt_result["retorno"]:.2f}%')
+    pdf.metric_row('Volatilidad (Riesgo):', f'{opt_result["volatilidad"]:.2f}%')
+    pdf.metric_row('Ratio de Sharpe:', f'{opt_result["sharpe"]:.2f}')
+    pdf.ln(5)
+    
+    # Asignación de Pesos
+    pdf.section_title('🥧 Asignación Óptima de Capital')
+    
+    pdf.set_font('Helvetica', 'B', 10)
+    pdf.set_fill_color(26, 54, 93)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(60, 8, 'Activo', 1, 0, 'C', True)
+    pdf.cell(40, 8, 'Peso (%)', 1, 0, 'C', True)
+    pdf.cell(40, 8, 'Monto ($)', 1, 0, 'C', True)
+    pdf.cell(50, 8, 'Retorno Indiv.', 1, 1, 'C', True)
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font('Helvetica', '', 10)
+    
+    for i, ticker in enumerate(opt_result['tickers']):
+        peso = opt_result['pesos'][i] * 100
+        monto = opt_result['pesos'][i] * capital
+        retorno_indiv = MOCK_DATABASE.get(ticker, {}).get('retorno_anual', 0.12) * 100
+        
+        if i % 2 == 0:
+            pdf.set_fill_color(240, 240, 240)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+        
+        pdf.cell(60, 8, ticker, 1, 0, 'L', True)
+        pdf.cell(40, 8, f'{peso:.1f}%', 1, 0, 'C', True)
+        pdf.cell(40, 8, f'${monto:,.0f}', 1, 0, 'R', True)
+        pdf.cell(50, 8, f'{retorno_indiv:.1f}%', 1, 1, 'R', True)
+    
+    pdf.ln(5)
+    
+    # Perfil de Riesgo
+    pdf.section_title('🎯 Perfil de Riesgo del Portafolio')
+    
+    volatilidad = opt_result['volatilidad']
+    if volatilidad < 15:
+        perfil = "CONSERVADOR - Protección de capital"
+    elif volatilidad < 25:
+        perfil = "MODERADO - Balance crecimiento/estabilidad"
+    else:
+        perfil = "AGRESIVO - Maximización de ganancias"
+    
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.cell(0, 10, perfil, 0, 1, 'C')
+    pdf.ln(5)
+    
+    # Disclaimer
+    pdf.set_draw_color(200, 200, 200)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(5)
+    pdf.set_font('Helvetica', 'I', 7)
+    pdf.set_text_color(128, 128, 128)
+    pdf.multi_cell(0, 4, 'DISCLAIMER: Este reporte es generado automáticamente con fines informativos. No constituye asesoramiento financiero. La optimización de Markowitz se basa en datos históricos que no garantizan resultados futuros.')
+    
+    temp_path = tempfile.mktemp(suffix='.pdf')
+    pdf.output(temp_path)
+    
+    return temp_path
 
 # ==============================================================================
 # ENCABEZADO
@@ -503,13 +664,11 @@ st.sidebar.divider()
 st.sidebar.markdown("### 📡 Fuente de Datos")
 if ALPHA_VANTAGE_KEY and ALPHA_VANTAGE_KEY != "DEMO_KEY":
     st.sidebar.success("✅ Alpha Vantage conectado")
-    st.sidebar.caption("500 llamadas/día disponibles")
+    st.sidebar.caption("25 llamadas/día (plan gratuito)")
 else:
     st.sidebar.warning("⚠️ Modo Demo (datos simulados)")
 
-# ==============================================================================
-# DEBUG: PROBAR CONEXIÓN ALPHA VANTAGE
-# ==============================================================================
+# Debug Alpha Vantage
 st.sidebar.divider()
 st.sidebar.subheader("🔧 Debug Alpha Vantage")
 
@@ -525,14 +684,9 @@ if st.sidebar.button("🔄 Probar Conexión API"):
                 ultimo_dia = list(data['Time Series (Daily)'].keys())[0]
                 ultimo_precio = data['Time Series (Daily)'][ultimo_dia]['4. close']
                 st.sidebar.write(f"📊 Último precio AAPL: ${ultimo_precio}")
-                st.sidebar.info(f"📅 Datos del: {ultimo_dia}")
             elif "Note" in data:
                 st.sidebar.error("⚠️ Rate limit alcanzado")
-                st.sidebar.warning("Espera 60 segundos y vuelve a intentar")
                 st.sidebar.write(data["Note"])
-            elif "Information" in data:
-                st.sidebar.warning("ℹ️ Información de API")
-                st.sidebar.write(data["Information"])
             else:
                 st.sidebar.error("❌ Error desconocido")
                 st.sidebar.json(data)
@@ -543,7 +697,7 @@ st.sidebar.divider()
 
 st.sidebar.markdown("""
 ### ℹ️ Sobre QuantBuffett AI
-Versión 1.0.0-rc2  
+Versión 1.1.0  
 Desarrollado con Streamlit + Python  
 
 *"Es mejor comprar una empresa maravillosa a un precio justo, que una empresa justa a un precio maravilloso."*  
@@ -555,9 +709,9 @@ Desarrollado con Streamlit + Python
 # ==============================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
     "🏠 Dashboard",
-    " Análisis de Activo",
-    " Portafolio",
-    "🔮 Pronóstico y Riesgos"
+    "🔍 Análisis de Activo",
+    "💼 Portafolio",
+    " Pronóstico y Riesgos"
 ])
 
 # ==============================================================================
@@ -575,7 +729,7 @@ with tab1:
         **Para comenzar:**
         1. Ve a la pestaña **🔍 Análisis de Activo** para analizar empresas individuales
         2. Ve a la pestaña **💼 Portafolio** para optimizar tu diversificación
-        3. Ve a la pestaña ** Pronóstico y Riesgos** para ver proyecciones
+        3. Ve a la pestaña **🔮 Pronóstico y Riesgos** para ver proyecciones
         
         **Empresas de ejemplo:** AAPL, MSFT, KO, GOOGL, WMT, TSLA
         """)
@@ -586,7 +740,7 @@ with tab1:
         with col2:
             st.metric("Empresas analizables", "∞", "Cualquier ticker")
         with col3:
-            st.metric("Llamadas API restantes", "~495", "de 500 diarias")
+            st.metric("Llamadas API restantes", "~25", "de 25 diarias")
     
     else:
         st.markdown("### Dashboard de Control")
@@ -594,13 +748,13 @@ with tab1:
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("API Alpha Vantage", "Conectada", "500 calls/day")
+            st.metric("API Alpha Vantage", "Conectada", "25 calls/day")
         with col2:
             st.metric("Modo Activo", "Avanzado", "Parámetros editables")
         with col3:
             st.metric("Empresas en DB", "6+", "Mock + Real")
         with col4:
-            st.metric("Versión", "1.0.0-rc2", "Paso 6C")
+            st.metric("Versión", "1.1.0", "Paso 7")
         
         st.divider()
         st.info("💡 **Tip:** Usa la pestaña 'Pronóstico y Riesgos' para ver proyecciones de precios y análisis de riesgos.")
@@ -637,7 +791,7 @@ with tab2:
         with col3:
             st.metric("📊 ROE", f"{datos.get('roic', 0):.1f}%")
         with col4:
-            st.metric("🎯 Beta", f"{datos.get('beta', 1):.2f}")
+            st.metric(" Beta", f"{datos.get('beta', 1):.2f}")
         
         st.divider()
         
@@ -646,13 +800,39 @@ with tab2:
             st.metric("💵 EPS", f"${datos.get('eps', 0):.2f}")
             st.metric("🏢 Sector", datos.get('sector', 'N/A'))
         with col2:
-            st.metric(" Market Cap", f"${datos.get('market_cap', 0)/1e9:.1f}B")
+            st.metric("💼 Market Cap", f"${datos.get('market_cap', 0)/1e9:.1f}B")
             st.metric("🏭 Industria", datos.get('industry', 'N/A'))
         
         if datos.get('descripcion'):
             st.divider()
-            st.subheader(" Descripción de la Empresa")
+            st.subheader("🏢 Descripción de la Empresa")
             st.write(datos['descripcion'])
+        
+        # BOTÓN EXPORTAR PDF
+        st.divider()
+        st.subheader(" Exportar Reporte")
+        
+        if st.button("📥 Descargar PDF del Análisis", type="primary"):
+            with st.spinner("Generando PDF..."):
+                try:
+                    # Generar pronóstico y riesgos para el PDF
+                    pronostico = pronosticar_precio(ticker_input, 90)
+                    riesgos = analizar_riesgos_ia(ticker_input)
+                    
+                    pdf_path = generar_pdf_activo(ticker_input, datos, pronostico, riesgos)
+                    
+                    with open(pdf_path, 'rb') as f:
+                        st.download_button(
+                            label="⬇️ Descargar PDF",
+                            data=f.read(),
+                            file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                            mime="application/pdf",
+                            type="primary"
+                        )
+                    
+                    st.success(f"✅ PDF generado correctamente")
+                except Exception as e:
+                    st.error(f"Error al generar PDF: {str(e)}")
 
 # ==============================================================================
 # PESTAÑA 3: PORTAFOLIO
@@ -714,8 +894,9 @@ with tab3:
                     opt_result = optimizar_portafolio(tickers_seleccionados, rf=0.04, modo="simple")
                     st.session_state.opt_result = opt_result
                     st.session_state.capital = capital
+                    st.session_state.tickers_portafolio = tickers_seleccionados
             
-            if 'opt_result' in st.session_state and st.session_state.opt_result['tickers'] == tickers_seleccionados:
+            if 'opt_result' in st.session_state and st.session_state.get('tickers_portafolio') == tickers_seleccionados:
                 opt = st.session_state.opt_result
                 capital = st.session_state.capital
                 
@@ -732,7 +913,7 @@ with tab3:
                 
                 st.divider()
                 
-                st.subheader(" Distribución Recomendada")
+                st.subheader("🥧 Distribución Recomendada")
                 
                 df_pesos = pd.DataFrame({
                     'Empresa': opt['tickers'],
@@ -757,7 +938,7 @@ with tab3:
                 
                 st.divider()
                 
-                st.subheader(" ¿Qué significa esto?")
+                st.subheader("💡 ¿Qué significa esto?")
                 
                 if opt['sharpe'] > 1.0:
                     st.success(f"""
@@ -777,7 +958,7 @@ with tab3:
                 
                 st.divider()
                 
-                st.subheader("🎯 Perfil de Este Portafolio")
+                st.subheader(" Perfil de Este Portafolio")
                 
                 if opt['volatilidad'] < 15:
                     st.markdown("""
@@ -789,7 +970,7 @@ with tab3:
                     """)
                 elif opt['volatilidad'] < 25:
                     st.markdown("""
-                    **Moderado**   
+                    **Moderado** 🟡  
                     Este portafolio balancea crecimiento y estabilidad. Ideal si:
                     - Buscas crecimiento pero con cierta protección
                     - Tu horizonte de inversión es mediano (3-7 años)
@@ -803,6 +984,32 @@ with tab3:
                     - Puedes tolerar caídas significativas temporales
                     - Buscas crecimiento agresivo
                     """)
+                
+                # BOTÓN EXPORTAR PDF PORTAFOLIO
+                st.divider()
+                st.subheader("📄 Exportar Reporte")
+                
+                if st.button("📥 Descargar PDF del Portafolio", type="primary"):
+                    with st.spinner("Generando PDF..."):
+                        try:
+                            pdf_path = generar_pdf_portafolio(
+                                st.session_state.tickers_portafolio,
+                                opt,
+                                capital
+                            )
+                            
+                            with open(pdf_path, 'rb') as f:
+                                st.download_button(
+                                    label="⬇️ Descargar PDF",
+                                    data=f.read(),
+                                    file_name=f"Portafolio_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                    mime="application/pdf",
+                                    type="primary"
+                                )
+                            
+                            st.success("✅ PDF generado correctamente")
+                        except Exception as e:
+                            st.error(f"Error al generar PDF: {str(e)}")
     
     else:
         st.markdown("""
@@ -863,7 +1070,7 @@ with tab3:
                     if agregados:
                         st.success(f"✅ Agregados: {', '.join(agregados)}")
                     if errores:
-                        st.error(f"❌ No encontrados: {', '.join(errores)}")
+                        st.error(f" No encontrados: {', '.join(errores)}")
                     
                     st.rerun()
         
@@ -896,6 +1103,7 @@ with tab3:
                         rf=rf/100, 
                         modo="avanzado"
                     )
+                    
                     opt_result['pesos'] = np.minimum(opt_result['pesos'], max_peso/100)
                     opt_result['pesos'] /= opt_result['pesos'].sum()
                     
@@ -914,6 +1122,7 @@ with tab3:
                     st.session_state.opt_result_avanzado = opt_result
                     st.session_state.rf = rf
                     st.session_state.max_peso = max_peso
+                    st.session_state.tickers_portafolio_av = tickers_seleccionados
             
             if 'opt_result_avanzado' in st.session_state:
                 opt = st.session_state.opt_result_avanzado
@@ -1027,12 +1236,20 @@ with tab3:
                 capital_rebalanceo = st.number_input("Capital total para rebalanceo (USD)", value=100000, step=10000)
                 
                 if st.button("🔄 Calcular Rebalanceo"):
-                    df_rebalanceo = calcular_rebalanceo(pesos_actuales, opt, capital_rebalanceo)
+                    df = pd.DataFrame()
+                    df['Activo'] = opt['tickers']
+                    df['Peso_Actual'] = [pesos_actuales.get(t, 0) for t in opt['tickers']]
+                    df['Peso_Optimo'] = opt['pesos'] * 100
+                    df['Diferencia'] = df['Peso_Optimo'] - df['Peso_Actual']
+                    df['Capital_Ajustar'] = df['Diferencia'] * capital_rebalanceo / 100
+                    df['Accion'] = df['Diferencia'].apply(
+                        lambda x: "🟢 COMPRAR" if x > 1 else "🔴 VENDER" if x < -1 else "✅ MANTENER"
+                    )
                     
-                    st.dataframe(df_rebalanceo, use_container_width=True, hide_index=True)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
                     
-                    comprar = df_rebalanceo[df_rebalanceo['Accion'].str.contains('COMPRAR')]
-                    vender = df_rebalanceo[df_rebalanceo['Accion'].str.contains('VENDER')]
+                    comprar = df[df['Accion'].str.contains('COMPRAR')]
+                    vender = df[df['Accion'].str.contains('VENDER')]
                     
                     col1, col2 = st.columns(2)
                     with col1:
@@ -1040,18 +1257,18 @@ with tab3:
                             st.success(f"**Comprar:** {', '.join(comprar['Activo'].tolist())}")
                     with col2:
                         if not vender.empty:
-                            st.error(f"**Vender:** {', '.join(vender['Activo'].tolist())}")
+                            st.error(f"**Vender:** {', '.join(vender['Activo'].tolist())")
 
 # ==============================================================================
 # PESTAÑA 4: PRONÓSTICO Y RIESGOS
 # ==============================================================================
 with tab4:
-    st.header("🔮 Pronóstico y Análisis de Riesgos")
+    st.header(" Pronóstico y Análisis de Riesgos")
     
     ticker_input_raw = st.text_input("Ticker para pronóstico y análisis de riesgos", value="AAPL")
     ticker_pronostico = ticker_input_raw.strip().upper()
     
-    if st.button(" Analizar Pronóstico y Riesgos", type="primary"):
+    if st.button("🔮 Analizar Pronóstico y Riesgos", type="primary"):
         with st.spinner(f"Ejecutando modelos para {ticker_pronostico}..."):
             try:
                 datos = obtener_datos_financieros(ticker_pronostico)
@@ -1092,7 +1309,7 @@ with tab4:
         if datos.get('es_real'):
             st.success(f"✅ Datos REALES de {datos.get('fuente', 'Alpha Vantage')}")
         else:
-            st.warning(f"️ {datos.get('fuente', 'Datos de demostración')}")
+            st.warning(f"⚠️ {datos.get('fuente', 'Datos de demostración')}")
         
         st.divider()
         
@@ -1181,7 +1398,7 @@ with tab4:
                 """)
             elif pron['cambio_pronostico'] > 0:
                 st.info(f"""
-                ### 📈 SEÑAL ALCISTA MODERADA
+                ###  SEÑAL ALCISTA MODERADA
                 El modelo predice un crecimiento del **{pron['cambio_pronostico']:.1f}%** en 90 días.
                 
                 **Recomendación:** Mantener posiciones actuales.
@@ -1233,7 +1450,7 @@ with tab4:
                 """)
         
         else:
-            st.subheader("📈 Pronóstico de Precio con Bandas de Confianza (95%)")
+            st.subheader(" Pronóstico de Precio con Bandas de Confianza (95%)")
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -1249,7 +1466,7 @@ with tab4:
             
             st.divider()
             
-            st.subheader(" Proyección con Intervalos de Confianza")
+            st.subheader("📊 Proyección con Intervalos de Confianza")
             
             fig = go.Figure()
             
@@ -1484,6 +1701,33 @@ with tab4:
                 
                 *Solo considerar si el potencial de retorno justifica el riesgo asumido*
                 """)
+            
+            # BOTÓN EXPORTAR PDF PRONÓSTICO
+            st.divider()
+            st.subheader(" Exportar Reporte")
+            
+            if st.button("📥 Descargar PDF de Pronóstico y Riesgos", type="primary"):
+                with st.spinner("Generando PDF..."):
+                    try:
+                        pdf_path = generar_pdf_activo(
+                            ticker_analizado,
+                            datos,
+                            pron,
+                            riesgos
+                        )
+                        
+                        with open(pdf_path, 'rb') as f:
+                            st.download_button(
+                                label="⬇️ Descargar PDF",
+                                data=f.read(),
+                                file_name=f"Pronostico_{ticker_analizado}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                mime="application/pdf",
+                                type="primary"
+                            )
+                        
+                        st.success("✅ PDF generado correctamente")
+                    except Exception as e:
+                        st.error(f"Error al generar PDF: {str(e)}")
 
 # ==============================================================================
 # FOOTER
@@ -1491,7 +1735,7 @@ with tab4:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.85em;'>
-    <p><strong>QuantBuffett AI v1.0.0-rc2</strong> | Paso 6C de 14</p>
+    <p><strong>QuantBuffett AI v1.1.0</strong> | Paso 7 de 14</p>
     <p>Datos: Alpha Vantage API (Prioridad) + Base de datos de demostración (Respaldo)</p>
     <p><em>"La regla número 1 es no perder dinero. La regla número 2 es no olvidar la regla número 1."</em> — Warren Buffett</p>
 </div>
