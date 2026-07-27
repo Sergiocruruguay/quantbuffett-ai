@@ -99,64 +99,91 @@ def calcular_market_cap_real(stock, price):
         shares = stock.info.get('sharesOutstanding', 0) or 0
         
         if shares > 0 and price > 0:
-            return price * shares
+            market_cap = price * shares
+            
+            # Validación: si el market cap calculado es irrealmente grande,
+            # shares probablemente viene en miles o millones
+            if market_cap > 1e15:  # > $1,500 trillones (imposible)
+                return market_cap / 1e6  # Asumir que shares está en millones
+            elif market_cap > 1e12:  # > $1 trillón
+                # Para empresas grandes como AAPL, MSFT: market cap real ~$3T
+                # Si el cálculo da >$10T, shares está en miles
+                if market_cap > price * 1e9:
+                    return market_cap / 1e3
+            return market_cap
         
         return None
     except:
         return None
 
 def calcular_dividend_yield_real(stock, price):
-    """Calcula Dividend Yield real usando datos de dividendos."""
+    """Calcula Dividend Yield real usando múltiples fuentes."""
     try:
-        # Obtener dividendos anuales
+        # Intento 1: Usar dividendos históricos
         dividends = stock.dividends
         
-        if dividends.empty:
-            return 0.0
+        if not dividends.empty:
+            one_year_ago = datetime.now() - pd.DateOffset(years=1)
+            recent_dividends = dividends[dividends.index >= one_year_ago]
+            
+            if not recent_dividends.empty and price > 0:
+                dividendos_anuales = recent_dividends.sum()
+                dividend_yield = (dividendos_anuales / price) * 100
+                
+                if 0 < dividend_yield < 20:
+                    return dividend_yield
         
-        # Sumar dividendos del último año
-        one_year_ago = datetime.now() - pd.DateOffset(years=1)
-        recent_dividends = dividends[dividends.index >= one_year_ago]
+        # Intento 2: Usar dividendRate de info
+        div_rate = stock.info.get('dividendRate', 0) or 0
+        if div_rate > 0 and price > 0:
+            dividend_yield = (div_rate / price) * 100
+            if 0 < dividend_yield < 20:
+                return dividend_yield
         
-        if recent_dividends.empty:
-            return 0.0
+        # Intento 3: Usar trailingAnnualDividendRate
+        trailing_rate = stock.info.get('trailingAnnualDividendRate', 0) or 0
+        if trailing_rate > 0 and price > 0:
+            dividend_yield = (trailing_rate / price) * 100
+            if 0 < dividend_yield < 20:
+                return dividend_yield
         
-        dividendos_anuales = recent_dividends.sum()
-        
-        if price <= 0:
-            return 0.0
-        
-        dividend_yield = (dividendos_anuales / price) * 100
-        
-        # Validar: debe estar entre 0% y 20%
-        if dividend_yield < 0 or dividend_yield > 20:
-            return 0.0
-        
-        return dividend_yield
+        return 0.0
     except:
         return 0.0
 
 def calcular_retorno_anual_real(stock):
-    """Calcula retorno anual real usando histórico de precios."""
+    """Calcula retorno anual real con validación robusta."""
     try:
-        hist = stock.history(period='1y')
+        # Intento 1: Último año
+        hist_1y = stock.history(period='1y')
         
-        if len(hist) < 100:
-            return None
+        if len(hist_1y) >= 100:
+            precio_inicial = hist_1y['Close'].iloc[0]
+            precio_final = hist_1y['Close'].iloc[-1]
+            
+            if precio_inicial > 0 and precio_final > 0:
+                retorno_1y = (precio_final / precio_inicial) - 1
+                
+                # Si el retorno está en rango razonable, usarlo
+                if -0.30 <= retorno_1y <= 0.80:
+                    return retorno_1y
         
-        precio_inicial = hist['Close'].iloc[0]
-        precio_final = hist['Close'].iloc[-1]
+        # Intento 2: Últimos 6 meses anualizado
+        hist_6m = stock.history(period='6mo')
         
-        if precio_inicial <= 0 or precio_final <= 0:
-            return None
+        if len(hist_6m) >= 50:
+            precio_inicial = hist_6m['Close'].iloc[0]
+            precio_final = hist_6m['Close'].iloc[-1]
+            
+            if precio_inicial > 0 and precio_final > 0:
+                retorno_6m = (precio_final / precio_inicial) - 1
+                retorno_anualizado = (1 + retorno_6m) ** 2 - 1
+                
+                if -0.30 <= retorno_anualizado <= 0.80:
+                    return retorno_anualizado
         
-        retorno = (precio_final - precio_inicial) / precio_inicial
-        
-        # Validar: debe estar entre -30% y +80%
-        if retorno < -0.30 or retorno > 0.80:
-            return None
-        
-        return retorno
+        # Si todo falla, retornar None (usará fallback de 15%)
+        return None
     except:
         return None
 
