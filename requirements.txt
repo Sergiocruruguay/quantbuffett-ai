@@ -5,4 +5,5 @@ numpy
 plotly
 scipy
 statsmodels
-
+fpdf2==2.7.9
+kaleido==0.2.1
