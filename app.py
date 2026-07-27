@@ -1,6 +1,6 @@
 """
 QuantBuffett AI - Plataforma Profesional de Análisis Financiero
-Versión: 1.1.0 | Paso 7: Exportación de Reportes PDF
+Versión: 1.1.1 | Paso 7: Exportación de Reportes PDF (Corregido)
 """
 
 import streamlit as st
@@ -423,7 +423,7 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04, modo: str = "simple") 
     }
 
 # ==============================================================================
-# GENERADOR DE PDF
+# GENERADOR DE PDF (CORREGIDO - SIN EMOJIS)
 # ==============================================================================
 class PDFReport(FPDF):
     """Generador de reportes PDF profesionales."""
@@ -465,7 +465,7 @@ class PDFReport(FPDF):
 
 
 def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict) -> str:
-    """Genera PDF de análisis de activo individual."""
+    """Genera PDF de análisis de activo individual (SIN EMOJIS)."""
     pdf = PDFReport()
     pdf.alias_nb_pages()
     pdf.add_page()
@@ -482,7 +482,7 @@ def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict
     pdf.ln(10)
     
     # Métricas Fundamentales
-    pdf.section_title(' Métricas Fundamentales')
+    pdf.section_title('Metricas Fundamentales')
     pdf.metric_row('Precio Actual:', f'${datos["precio"]:.2f}')
     pdf.metric_row('P/E Ratio:', f'{datos.get("pe_ratio", 0):.1f}x')
     pdf.metric_row('EPS:', f'${datos.get("eps", 0):.2f}')
@@ -494,7 +494,7 @@ def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict
     pdf.ln(5)
     
     # Pronóstico
-    pdf.section_title(' Pronóstico a 90 Días')
+    pdf.section_title('Pronóstico a 90 Días')
     pdf.metric_row('Cambio 30 días:', f'{pronostico["cambio_30d"]:.1f}%')
     pdf.metric_row('Pronóstico 90 días:', f'{pronostico["cambio_pronostico"]:.1f}%')
     pdf.metric_row('Tendencia:', pronostico['tendencia'])
@@ -502,7 +502,7 @@ def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict
     pdf.ln(5)
     
     # Análisis de Riesgos
-    pdf.section_title('🛡️ Análisis de Riesgos')
+    pdf.section_title('Análisis de Riesgos')
     pdf.metric_row('Score de Riesgo:', f'{riesgos["score_riesgo"]}/100')
     pdf.metric_row('Perfil:', riesgos['perfil_riesgo'])
     pdf.ln(3)
@@ -521,16 +521,16 @@ def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict
     pdf.ln(5)
     
     # Veredicto
-    pdf.section_title('🎯 Veredicto Final')
+    pdf.section_title('Veredicto Final')
     pdf.set_font('Helvetica', '', 10)
     pdf.set_text_color(0, 0, 0)
     
     if riesgos['score_riesgo'] < 30:
-        veredicto = "PERFIL CONSERVADOR - APTO PARA INVERSIÓN DE VALOR"
+        veredicto = "PERFIL CONSERVADOR - APTO PARA INVERSION DE VALOR"
     elif riesgos['score_riesgo'] < 50:
-        veredicto = "PERFIL BALANCEADO - ACEPTABLE CON DIVERSIFICACIÓN"
+        veredicto = "PERFIL BALANCEADO - ACEPTABLE CON DIVERSIFICACION"
     else:
-        veredicto = "PERFIL AGRESIVO - REQUIERE ANÁLISIS PROFUNDO"
+        veredicto = "PERFIL AGRESIVO - REQUIERE ANALISIS PROFUNDO"
     
     pdf.set_font('Helvetica', 'B', 12)
     pdf.cell(0, 10, veredicto, 0, 1, 'C')
@@ -546,7 +546,7 @@ def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict
     pdf.ln(5)
     pdf.set_font('Helvetica', 'I', 7)
     pdf.set_text_color(128, 128, 128)
-    pdf.multi_cell(0, 4, 'DISCLAIMER: Este reporte es generado automáticamente con fines informativos. No constituye asesoramiento financiero. Los datos pueden tener demora o ser estimaciones. Consulte con un asesor financiero profesional antes de tomar decisiones de inversión.')
+    pdf.multi_cell(0, 4, 'DISCLAIMER: Este reporte es generado automaticamente con fines informativos. No constituye asesoramiento financiero. Los datos pueden tener demora o ser estimaciones. Consulte con un asesor financiero profesional antes de tomar decisiones de inversion.')
     
     # Guardar PDF
     temp_path = tempfile.mktemp(suffix='.pdf')
@@ -556,7 +556,7 @@ def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict
 
 
 def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> str:
-    """Genera PDF de análisis de portafolio."""
+    """Genera PDF de análisis de portafolio (SIN EMOJIS)."""
     pdf = PDFReport()
     pdf.alias_nb_pages()
     pdf.add_page()
@@ -574,14 +574,14 @@ def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> s
     pdf.ln(10)
     
     # Métricas del Portafolio
-    pdf.section_title(' Métricas del Portafolio Óptimo')
+    pdf.section_title('Metricas del Portafolio Optimo')
     pdf.metric_row('Retorno Anual Esperado:', f'{opt_result["retorno"]:.2f}%')
     pdf.metric_row('Volatilidad (Riesgo):', f'{opt_result["volatilidad"]:.2f}%')
     pdf.metric_row('Ratio de Sharpe:', f'{opt_result["sharpe"]:.2f}')
     pdf.ln(5)
     
     # Asignación de Pesos
-    pdf.section_title('🥧 Asignación Óptima de Capital')
+    pdf.section_title('Asignacion Optima de Capital')
     
     pdf.set_font('Helvetica', 'B', 10)
     pdf.set_fill_color(26, 54, 93)
@@ -612,15 +612,15 @@ def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> s
     pdf.ln(5)
     
     # Perfil de Riesgo
-    pdf.section_title('🎯 Perfil de Riesgo del Portafolio')
+    pdf.section_title('Perfil de Riesgo del Portafolio')
     
     volatilidad = opt_result['volatilidad']
     if volatilidad < 15:
-        perfil = "CONSERVADOR - Protección de capital"
+        perfil = "CONSERVADOR - Proteccion de capital"
     elif volatilidad < 25:
         perfil = "MODERADO - Balance crecimiento/estabilidad"
     else:
-        perfil = "AGRESIVO - Maximización de ganancias"
+        perfil = "AGRESIVO - Maximizacion de ganancias"
     
     pdf.set_font('Helvetica', 'B', 12)
     pdf.cell(0, 10, perfil, 0, 1, 'C')
@@ -632,7 +632,7 @@ def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> s
     pdf.ln(5)
     pdf.set_font('Helvetica', 'I', 7)
     pdf.set_text_color(128, 128, 128)
-    pdf.multi_cell(0, 4, 'DISCLAIMER: Este reporte es generado automáticamente con fines informativos. No constituye asesoramiento financiero. La optimización de Markowitz se basa en datos históricos que no garantizan resultados futuros.')
+    pdf.multi_cell(0, 4, 'DISCLAIMER: Este reporte es generado automaticamente con fines informativos. No constituye asesoramiento financiero. La optimizacion de Markowitz se basa en datos historicos que no garantizan resultados futuros.')
     
     temp_path = tempfile.mktemp(suffix='.pdf')
     pdf.output(temp_path)
@@ -655,7 +655,7 @@ st.sidebar.header("⚙️ Configuración")
 
 modo_usuario = st.sidebar.radio(
     "Modo de Visualización",
-    ["🟢 Simple (Principiantes)", "🔵 Avanzado (Expertos)"],
+    [" Simple (Principiantes)", "🔵 Avanzado (Expertos)"],
     help="Simple: veredictos claros. Avanzado: métricas detalladas y parámetros editables."
 )
 
@@ -683,7 +683,7 @@ if st.sidebar.button("🔄 Probar Conexión API"):
                 st.sidebar.success("✅ API funcionando correctamente")
                 ultimo_dia = list(data['Time Series (Daily)'].keys())[0]
                 ultimo_precio = data['Time Series (Daily)'][ultimo_dia]['4. close']
-                st.sidebar.write(f"📊 Último precio AAPL: ${ultimo_precio}")
+                st.sidebar.write(f" Último precio AAPL: ${ultimo_precio}")
             elif "Note" in data:
                 st.sidebar.error("⚠️ Rate limit alcanzado")
                 st.sidebar.write(data["Note"])
@@ -697,7 +697,7 @@ st.sidebar.divider()
 
 st.sidebar.markdown("""
 ### ℹ️ Sobre QuantBuffett AI
-Versión 1.1.0  
+Versión 1.1.1  
 Desarrollado con Streamlit + Python  
 
 *"Es mejor comprar una empresa maravillosa a un precio justo, que una empresa justa a un precio maravilloso."*  
@@ -708,10 +708,10 @@ Desarrollado con Streamlit + Python
 # NAVEGACIÓN POR PESTAÑAS
 # ==============================================================================
 tab1, tab2, tab3, tab4 = st.tabs([
-    "🏠 Dashboard",
+    " Dashboard",
     "🔍 Análisis de Activo",
     "💼 Portafolio",
-    " Pronóstico y Riesgos"
+    "🔮 Pronóstico y Riesgos"
 ])
 
 # ==============================================================================
@@ -720,7 +720,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.header("🏠 Dashboard Ejecutivo")
     
-    if modo_usuario == "🟢 Simple (Principiantes)":
+    if modo_usuario == " Simple (Principiantes)":
         st.markdown("""
         ### Bienvenido a QuantBuffett AI
         
@@ -754,7 +754,7 @@ with tab1:
         with col3:
             st.metric("Empresas en DB", "6+", "Mock + Real")
         with col4:
-            st.metric("Versión", "1.1.0", "Paso 7")
+            st.metric("Versión", "1.1.1", "Paso 7")
         
         st.divider()
         st.info("💡 **Tip:** Usa la pestaña 'Pronóstico y Riesgos' para ver proyecciones de precios y análisis de riesgos.")
@@ -791,7 +791,7 @@ with tab2:
         with col3:
             st.metric("📊 ROE", f"{datos.get('roic', 0):.1f}%")
         with col4:
-            st.metric(" Beta", f"{datos.get('beta', 1):.2f}")
+            st.metric("🎯 Beta", f"{datos.get('beta', 1):.2f}")
         
         st.divider()
         
@@ -800,7 +800,7 @@ with tab2:
             st.metric("💵 EPS", f"${datos.get('eps', 0):.2f}")
             st.metric("🏢 Sector", datos.get('sector', 'N/A'))
         with col2:
-            st.metric("💼 Market Cap", f"${datos.get('market_cap', 0)/1e9:.1f}B")
+            st.metric(" Market Cap", f"${datos.get('market_cap', 0)/1e9:.1f}B")
             st.metric("🏭 Industria", datos.get('industry', 'N/A'))
         
         if datos.get('descripcion'):
@@ -810,7 +810,7 @@ with tab2:
         
         # BOTÓN EXPORTAR PDF
         st.divider()
-        st.subheader(" Exportar Reporte")
+        st.subheader("📄 Exportar Reporte")
         
         if st.button("📥 Descargar PDF del Análisis", type="primary"):
             with st.spinner("Generando PDF..."):
@@ -889,7 +889,7 @@ with tab3:
             
             st.divider()
             
-            if st.button(" Optimizar Mi Portafolio", type="primary", use_container_width=True):
+            if st.button("🚀 Optimizar Mi Portafolio", type="primary", use_container_width=True):
                 with st.spinner("Calculando la mejor distribución..."):
                     opt_result = optimizar_portafolio(tickers_seleccionados, rf=0.04, modo="simple")
                     st.session_state.opt_result = opt_result
@@ -933,7 +933,7 @@ with tab3:
                 
                 st.divider()
                 
-                st.subheader("📋 Detalle de Inversión")
+                st.subheader(" Detalle de Inversión")
                 st.dataframe(df_pesos, use_container_width=True, hide_index=True)
                 
                 st.divider()
@@ -958,7 +958,7 @@ with tab3:
                 
                 st.divider()
                 
-                st.subheader(" Perfil de Este Portafolio")
+                st.subheader("🎯 Perfil de Este Portafolio")
                 
                 if opt['volatilidad'] < 15:
                     st.markdown("""
@@ -978,7 +978,7 @@ with tab3:
                     """)
                 else:
                     st.markdown("""
-                    **Agresivo** 🔴  
+                    **Agresivo**   
                     Este portafolio busca maximizar ganancias aceptando mayor volatilidad. Ideal si:
                     - Tu horizonte de inversión es largo (+7 años)
                     - Puedes tolerar caídas significativas temporales
@@ -1070,7 +1070,7 @@ with tab3:
                     if agregados:
                         st.success(f"✅ Agregados: {', '.join(agregados)}")
                     if errores:
-                        st.error(f" No encontrados: {', '.join(errores)}")
+                        st.error(f"❌ No encontrados: {', '.join(errores)}")
                     
                     st.rerun()
         
@@ -1243,7 +1243,7 @@ with tab3:
                     df['Diferencia'] = df['Peso_Optimo'] - df['Peso_Actual']
                     df['Capital_Ajustar'] = df['Diferencia'] * capital_rebalanceo / 100
                     df['Accion'] = df['Diferencia'].apply(
-                        lambda x: "🟢 COMPRAR" if x > 1 else "🔴 VENDER" if x < -1 else "✅ MANTENER"
+                        lambda x: " COMPRAR" if x > 1 else "🔴 VENDER" if x < -1 else "✅ MANTENER"
                     )
                     
                     st.dataframe(df, use_container_width=True, hide_index=True)
@@ -1263,7 +1263,7 @@ with tab3:
 # PESTAÑA 4: PRONÓSTICO Y RIESGOS
 # ==============================================================================
 with tab4:
-    st.header(" Pronóstico y Análisis de Riesgos")
+    st.header("🔮 Pronóstico y Análisis de Riesgos")
     
     ticker_input_raw = st.text_input("Ticker para pronóstico y análisis de riesgos", value="AAPL")
     ticker_pronostico = ticker_input_raw.strip().upper()
@@ -1309,11 +1309,11 @@ with tab4:
         if datos.get('es_real'):
             st.success(f"✅ Datos REALES de {datos.get('fuente', 'Alpha Vantage')}")
         else:
-            st.warning(f"⚠️ {datos.get('fuente', 'Datos de demostración')}")
+            st.warning(f"️ {datos.get('fuente', 'Datos de demostración')}")
         
         st.divider()
         
-        if modo_usuario == "🟢 Simple (Principiantes)":
+        if modo_usuario == " Simple (Principiantes)":
             st.subheader("📈 Pronóstico de Precio a 90 Días")
             
             col1, col2, col3 = st.columns(3)
@@ -1324,7 +1324,7 @@ with tab4:
                 st.metric("📊 Cambio 30 días", f"{cambio_30d:.1f}%", "↗️" if cambio_30d > 0 else "↘️")
             with col3:
                 cambio_pron = pron['cambio_pronostico']
-                st.metric(" Pronóstico 90 días", f"{cambio_pron:.1f}%", "↗️" if cambio_pron > 0 else "↘️")
+                st.metric("🔮 Pronóstico 90 días", f"{cambio_pron:.1f}%", "↗️" if cambio_pron > 0 else "↘️")
             
             st.divider()
             
@@ -1387,7 +1387,7 @@ with tab4:
             
             st.divider()
             
-            st.subheader(" Veredicto del Modelo")
+            st.subheader("🎯 Veredicto del Modelo")
             
             if pron['cambio_pronostico'] > 10:
                 st.success(f"""
@@ -1398,7 +1398,7 @@ with tab4:
                 """)
             elif pron['cambio_pronostico'] > 0:
                 st.info(f"""
-                ###  SEÑAL ALCISTA MODERADA
+                ### 📈 SEÑAL ALCISTA MODERADA
                 El modelo predice un crecimiento del **{pron['cambio_pronostico']:.1f}%** en 90 días.
                 
                 **Recomendación:** Mantener posiciones actuales.
@@ -1450,7 +1450,7 @@ with tab4:
                 """)
         
         else:
-            st.subheader(" Pronóstico de Precio con Bandas de Confianza (95%)")
+            st.subheader("📈 Pronóstico de Precio con Bandas de Confianza (95%)")
             
             col1, col2, col3, col4 = st.columns(4)
             with col1:
@@ -1460,9 +1460,9 @@ with tab4:
                 st.metric("📊 Cambio 30 días", f"{cambio_30d:.1f}%", "↗️" if cambio_30d > 0 else "↘️")
             with col3:
                 cambio_pron = pron['cambio_pronostico']
-                st.metric(" Pronóstico 90 días", f"{cambio_pron:.1f}%", "↗️" if cambio_pron > 0 else "↘️")
+                st.metric("🔮 Pronóstico 90 días", f"{cambio_pron:.1f}%", "↗️" if cambio_pron > 0 else "↘️")
             with col4:
-                st.metric("⚠️ Volatilidad Diaria", f"{pron['volatilidad_diaria']:.2f}%")
+                st.metric("️ Volatilidad Diaria", f"{pron['volatilidad_diaria']:.2f}%")
             
             st.divider()
             
@@ -1525,7 +1525,7 @@ with tab4:
             
             st.divider()
             
-            st.subheader("📊 Análisis de Tendencia")
+            st.subheader(" Análisis de Tendencia")
             
             col1, col2 = st.columns(2)
             
@@ -1556,7 +1556,7 @@ with tab4:
             
             st.divider()
             
-            st.subheader("🛡️ Análisis de Riesgos Consolidado")
+            st.subheader("️ Análisis de Riesgos Consolidado")
             
             col1, col2 = st.columns([1, 2])
             
@@ -1641,7 +1641,7 @@ with tab4:
             
             st.divider()
             
-            st.subheader("🔍 Detalle de Riesgos Identificados")
+            st.subheader(" Detalle de Riesgos Identificados")
             
             for i, riesgo in enumerate(riesgos['riesgos'], 1):
                 with st.expander(f"{i}. Riesgo {riesgo['categoria']} - Severidad: {riesgo['nivel']} ({riesgo['severidad']}/100)"):
@@ -1704,7 +1704,7 @@ with tab4:
             
             # BOTÓN EXPORTAR PDF PRONÓSTICO
             st.divider()
-            st.subheader(" Exportar Reporte")
+            st.subheader("📄 Exportar Reporte")
             
             if st.button("📥 Descargar PDF de Pronóstico y Riesgos", type="primary"):
                 with st.spinner("Generando PDF..."):
@@ -1735,7 +1735,7 @@ with tab4:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.85em;'>
-    <p><strong>QuantBuffett AI v1.1.0</strong> | Paso 7 de 14</p>
+    <p><strong>QuantBuffett AI v1.1.1</strong> | Paso 7 de 14</p>
     <p>Datos: Alpha Vantage API (Prioridad) + Base de datos de demostración (Respaldo)</p>
     <p><em>"La regla número 1 es no perder dinero. La regla número 2 es no olvidar la regla número 1."</em> — Warren Buffett</p>
 </div>
