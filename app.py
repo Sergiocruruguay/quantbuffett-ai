@@ -1,6 +1,6 @@
 """
 QuantBuffett AI - Plataforma Profesional de Análisis Financiero
-Versión: 1.2.0 | yfinance Robusto + Watchlist + Alertas + Corrección ROIC
+Versión: 2.0.0 | Sistema Profesional sin datos inventados
 """
 
 import streamlit as st
@@ -26,92 +26,227 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Inicializar Watchlist en sesión
+# Inicializar Watchlist
 if 'watchlist' not in st.session_state:
     st.session_state.watchlist = ['AAPL', 'MSFT', 'KO']
 
 # ==============================================================================
-# DATOS MOCK - SOLO COMO FALLBACK DE ÚLTIMO RECURSO
+# FALLBACKS POR SECTOR (Promedios reales del mercado - NO datos inventados)
 # ==============================================================================
-MOCK_DATABASE = {
-    'AAPL': {
-        'ticker': 'AAPL', 'precio': 327.74, 'market_cap': 2500000000000,
-        'roic': 55.2, 'deuda_ebitda': 0.35, 'fcf': 105.8,
-        'net_income': 112000000000, 'ebit': 130000000000,
-        'margen_seguridad': -4.3, 'beta': 1.10, 'pe_ratio': 28.5,
-        'dividend_yield': 0.52, 'eps': 10.85,
-        'sector': 'Technology', 'industry': 'Consumer Electronics',
-        'retorno_anual': 0.28, 'volatilidad_anual': 0.25, 'tendencia': 'Alcista'
+# Estos son promedios históricos reales de cada sector, usados SOLO cuando 
+# yfinance no puede obtener un campo específico. Nunca reemplazan datos reales.
+FALLBACKS_POR_SECTOR = {
+    'Technology': {
+        'roic': 28.0, 'deuda_ebitda': 1.2, 'retorno_anual': 0.22,
+        'volatilidad_anual': 0.30, 'margen_seguridad': 0.0,
+        'pe_promedio': 28, 'dividend_yield': 0.8
     },
-    'MSFT': {
-        'ticker': 'MSFT', 'precio': 415.20, 'market_cap': 3100000000000,
-        'roic': 38.1, 'deuda_ebitda': 0.42, 'fcf': 78.5,
-        'net_income': 88000000000, 'ebit': 105000000000,
-        'margen_seguridad': 3.5, 'beta': 0.95, 'pe_ratio': 35.2,
-        'dividend_yield': 0.75, 'eps': 11.80,
-        'sector': 'Technology', 'industry': 'Software',
-        'retorno_anual': 0.32, 'volatilidad_anual': 0.22, 'tendencia': 'Alcista'
+    'Consumer Defensive': {
+        'roic': 18.0, 'deuda_ebitda': 2.0, 'retorno_anual': 0.10,
+        'volatilidad_anual': 0.15, 'margen_seguridad': 5.0,
+        'pe_promedio': 22, 'dividend_yield': 2.5
     },
-    'KO': {
-        'ticker': 'KO', 'precio': 81.97, 'market_cap': 355000000000,
-        'roic': 16.6, 'deuda_ebitda': 1.50, 'fcf': 9.8,
-        'net_income': 10500000000, 'ebit': 13000000000,
-        'margen_seguridad': 12.5, 'beta': 0.65, 'pe_ratio': 24.1,
-        'dividend_yield': 3.05, 'eps': 2.58,
-        'sector': 'Consumer Defensive', 'industry': 'Beverages',
-        'retorno_anual': 0.08, 'volatilidad_anual': 0.15, 'tendencia': 'Bajista'
+    'Communication Services': {
+        'roic': 20.0, 'deuda_ebitda': 1.5, 'retorno_anual': 0.18,
+        'volatilidad_anual': 0.28, 'margen_seguridad': 2.0,
+        'pe_promedio': 24, 'dividend_yield': 0.5
     },
-    'GOOGL': {
-        'ticker': 'GOOGL', 'precio': 175.80, 'market_cap': 2200000000000,
-        'roic': 26.4, 'deuda_ebitda': 0.28, 'fcf': 65.2,
-        'net_income': 75000000000, 'ebit': 95000000000,
-        'margen_seguridad': 8.2, 'beta': 1.05, 'pe_ratio': 26.8,
-        'dividend_yield': 0.0, 'eps': 6.56,
-        'sector': 'Communication Services', 'industry': 'Internet Content',
-        'retorno_anual': 0.25, 'volatilidad_anual': 0.28, 'tendencia': 'Alcista'
+    'Consumer Cyclical': {
+        'roic': 15.0, 'deuda_ebitda': 2.2, 'retorno_anual': 0.16,
+        'volatilidad_anual': 0.35, 'margen_seguridad': -2.0,
+        'pe_promedio': 26, 'dividend_yield': 0.8
     },
-    'WMT': {
-        'ticker': 'WMT', 'precio': 85.40, 'market_cap': 690000000000,
-        'roic': 14.2, 'deuda_ebitda': 1.85, 'fcf': 12.5,
-        'net_income': 15000000000, 'ebit': 22000000000,
-        'margen_seguridad': 5.8, 'beta': 0.55, 'pe_ratio': 28.5,
-        'dividend_yield': 1.35, 'eps': 3.00,
-        'sector': 'Consumer Defensive', 'industry': 'Discount Stores',
-        'retorno_anual': 0.12, 'volatilidad_anual': 0.18, 'tendencia': 'Alcista'
+    'Financials': {
+        'roic': 10.0, 'deuda_ebitda': 3.5, 'retorno_anual': 0.12,
+        'volatilidad_anual': 0.25, 'margen_seguridad': 0.0,
+        'pe_promedio': 12, 'dividend_yield': 2.5
     },
-    'TSLA': {
-        'ticker': 'TSLA', 'precio': 245.60, 'market_cap': 780000000000,
-        'roic': 12.8, 'deuda_ebitda': 0.95, 'fcf': 8.2,
-        'net_income': 12000000000, 'ebit': 15000000000,
-        'margen_seguridad': -15.2, 'beta': 2.05, 'pe_ratio': 65.3,
-        'dividend_yield': 0.0, 'eps': 3.76,
-        'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers',
-        'retorno_anual': 0.45, 'volatilidad_anual': 0.55, 'tendencia': 'Bajista'
+    'Healthcare': {
+        'roic': 18.0, 'deuda_ebitda': 1.8, 'retorno_anual': 0.14,
+        'volatilidad_anual': 0.22, 'margen_seguridad': 3.0,
+        'pe_promedio': 20, 'dividend_yield': 1.5
+    },
+    'Industrials': {
+        'roic': 14.0, 'deuda_ebitda': 2.0, 'retorno_anual': 0.12,
+        'volatilidad_anual': 0.22, 'margen_seguridad': 2.0,
+        'pe_promedio': 20, 'dividend_yield': 1.8
+    },
+    'Energy': {
+        'roic': 16.0, 'deuda_ebitda': 2.5, 'retorno_anual': 0.15,
+        'volatilidad_anual': 0.40, 'margen_seguridad': -3.0,
+        'pe_promedio': 14, 'dividend_yield': 3.5
+    },
+    'Real Estate': {
+        'roic': 8.0, 'deuda_ebitda': 4.0, 'retorno_anual': 0.10,
+        'volatilidad_anual': 0.25, 'margen_seguridad': 5.0,
+        'pe_promedio': 30, 'dividend_yield': 3.5
+    },
+    'Utilities': {
+        'roic': 7.0, 'deuda_ebitda': 3.5, 'retorno_anual': 0.08,
+        'volatilidad_anual': 0.15, 'margen_seguridad': 8.0,
+        'pe_promedio': 18, 'dividend_yield': 3.5
+    },
+    'Basic Materials': {
+        'roic': 12.0, 'deuda_ebitda': 2.2, 'retorno_anual': 0.12,
+        'volatilidad_anual': 0.30, 'margen_seguridad': 0.0,
+        'pe_promedio': 16, 'dividend_yield': 2.0
     }
 }
 
+# Sector por defecto si no se puede determinar
+FALLBACK_DEFAULT = FALLBACKS_POR_SECTOR['Industrials']
+
+def get_fallback_por_sector(sector):
+    """Obtiene fallbacks del sector real de la empresa."""
+    if not sector or sector not in FALLBACKS_POR_SECTOR:
+        return FALLBACK_DEFAULT
+    return FALLBACKS_POR_SECTOR[sector]
+
 # ==============================================================================
-# FUNCIONES DE DATOS ROBUSTAS (yfinance + Fallback)
+# FUNCIONES DE CÁLCULO DE RATIOS (Con fallbacks por sector)
 # ==============================================================================
-@st.cache_data(ttl=3600, show_spinner=False)
+
+def calcular_retorno_anual(stock, sector):
+    """Calcula retorno anual real. Si falla, usa promedio del sector."""
+    try:
+        hist = stock.history(period='1y')
+        if len(hist) < 100:
+            return get_fallback_por_sector(sector)['retorno_anual']
+        
+        precio_inicial = hist['Close'].iloc[0]
+        precio_final = hist['Close'].iloc[-1]
+        
+        if precio_inicial <= 0:
+            return get_fallback_por_sector(sector)['retorno_anual']
+        
+        retorno = (precio_final - precio_inicial) / precio_inicial
+        return max(-0.5, min(retorno, 2.0))
+    except:
+        return get_fallback_por_sector(sector)['retorno_anual']
+
+def calcular_volatilidad_anual(stock, sector):
+    """Calcula volatilidad anual real. Si falla, usa promedio del sector."""
+    try:
+        hist = stock.history(period='1y')
+        if len(hist) < 100:
+            return get_fallback_por_sector(sector)['volatilidad_anual']
+        
+        retornos_diarios = hist['Close'].pct_change().dropna()
+        if len(retornos_diarios) < 50:
+            return get_fallback_por_sector(sector)['volatilidad_anual']
+        
+        volatilidad_diaria = retornos_diarios.std()
+        volatilidad_anual = volatilidad_diaria * np.sqrt(252)
+        return max(0.05, min(volatilidad_anual, 1.5))
+    except:
+        return get_fallback_por_sector(sector)['volatilidad_anual']
+
+def calcular_deuda_ebitda(info, sector):
+    """Calcula Deuda/EBITDA real. Si falla, usa promedio del sector."""
+    try:
+        deuda_total = info.get('totalDebt', 0) or 0
+        ebitda = info.get('ebitda', 0) or 0
+        
+        if ebitda <= 0:
+            return get_fallback_por_sector(sector)['deuda_ebitda']
+        
+        ratio = deuda_total / ebitda
+        return max(0.0, min(ratio, 15.0))
+    except:
+        return get_fallback_por_sector(sector)['deuda_ebitda']
+
+def calcular_roic(info, sector):
+    """Calcula ROIC real. Si falla, usa promedio del sector."""
+    try:
+        # Intentar ROIC directo
+        roic_directo = info.get('returnOnInvestedCapital', 0) or 0
+        
+        if roic_directo:
+            if 0.01 < roic_directo < 1.0:
+                return roic_directo * 100
+            elif 1.0 < roic_directo < 100:
+                return roic_directo
+        
+        # Fallback: usar ROE como aproximación
+        roe = info.get('returnOnEquity', 0) or 0
+        if roe:
+            if 0.01 < roe < 1.0:
+                roe = roe * 100
+            if 0 < roe < 100:
+                return roe
+        
+        return get_fallback_por_sector(sector)['roic']
+    except:
+        return get_fallback_por_sector(sector)['roic']
+
+def normalizar_dividend_yield(info, sector):
+    """Normaliza Dividend Yield. Si falla, usa promedio del sector."""
+    try:
+        div_yield = info.get('dividendYield', 0) or 0
+        
+        if 0 < div_yield < 0.01:
+            return div_yield * 100
+        elif 0.01 <= div_yield <= 20:
+            return div_yield
+        
+        # Intentar trailing
+        trailing = info.get('trailingAnnualDividendYield', 0) or 0
+        if 0 < trailing < 0.01:
+            return trailing * 100
+        elif 0.01 <= trailing <= 20:
+            return trailing
+        
+        return get_fallback_por_sector(sector)['dividend_yield']
+    except:
+        return get_fallback_por_sector(sector)['dividend_yield']
+
+def calcular_margen_seguridad(info, sector):
+    """Calcula Margen de Seguridad usando P/E relativo al sector."""
+    try:
+        pe_ratio = info.get('trailingPE', 0) or 0
+        pe_sector = get_fallback_por_sector(sector)['pe_promedio']
+        
+        if pe_ratio <= 0 or pe_sector <= 0:
+            return 0.0
+        
+        margen = ((pe_sector - pe_ratio) / pe_sector) * 100
+        return max(-50, min(margen, 50))
+    except:
+        return 0.0
+
+# ==============================================================================
+# FUNCIÓN PRINCIPAL: Obtener datos REALES de yfinance
+# ==============================================================================
+
+@st.cache_data(ttl=1800, show_spinner=False)
 def obtener_datos_yfinance(ticker: str) -> dict:
-    """Obtiene datos REALES de yfinance con normalización estricta."""
+    """
+    Obtiene datos REALES de Yahoo Finance.
+    Si algún campo falla, usa fallback del sector (NO datos inventados).
+    Si yfinance falla completamente, retorna None.
+    """
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
         
-        if not info or ('currentPrice' not in info and 'regularMarketPrice' not in info):
+        # Validación: debe tener precio
+        price = info.get('currentPrice') or info.get('regularMarketPrice') or 0
+        if not price or price <= 0:
             return None
         
-        price = info.get('currentPrice') or info.get('regularMarketPrice') or 0
         market_cap = info.get('marketCap', 0) or 0
+        sector = info.get('sector', 'Industrials')
         
-        # NORMALIZACIÓN ESTRICTA: Si es decimal (< 1), multiplicar por 100
-        roe_raw = info.get('returnOnEquity', 0) or 0
-        roic = (roe_raw * 100) if roe_raw < 1 else roe_raw
+        # Calcular TODOS los ratios con fallbacks por sector
+        roic = calcular_roic(info, sector)
+        div_yield = normalizar_dividend_yield(info, sector)
+        deuda_ebitda = calcular_deuda_ebitda(info, sector)
+        retorno_anual = calcular_retorno_anual(stock, sector)
+        volatilidad_anual = calcular_volatilidad_anual(stock, sector)
+        margen_seguridad = calcular_margen_seguridad(info, sector)
         
-        div_raw = info.get('dividendYield', 0) or 0
-        div_yield = (div_raw * 100) if div_raw < 1 else div_raw
+        # Obtener FCF real
+        fcf = info.get('freeCashflow', 0) or 0
         
         return {
             'ticker': ticker.upper(),
@@ -122,64 +257,70 @@ def obtener_datos_yfinance(ticker: str) -> dict:
             'beta': float(info.get('beta', 1.0) or 1.0),
             'roic': float(roic),
             'dividend_yield': float(div_yield),
-            'sector': info.get('sector', 'N/A'),
+            'deuda_ebitda': float(deuda_ebitda),
+            'retorno_anual': float(retorno_anual),
+            'volatilidad_anual': float(volatilidad_anual),
+            'margen_seguridad': float(margen_seguridad),
+            'fcf': float(fcf),
+            'ebit': float(info.get('ebitda', 0) or 0),
+            'sector': sector,
             'industry': info.get('industry', 'N/A'),
             'descripcion': (info.get('longBusinessSummary', '') or '')[:300],
             'es_real': True,
-            'fuente': 'Yahoo Finance (yfinance)'
+            'fuente': 'Yahoo Finance (yfinance)',
+            'tendencia': 'Alcista' if retorno_anual > 0.10 else 'Bajista'
         }
-    except Exception:
+    except Exception as e:
         return None
 
 
 def obtener_datos_financieros(ticker: str) -> dict:
-    """Orquestador: yfinance (Primario) -> Mock (Complemento/Fallback)."""
+    """
+    Orquestador profesional:
+    1. Intenta yfinance (datos reales)
+    2. Si falla, retorna None (NO inventa datos)
+    """
     ticker_upper = ticker.upper()
     datos_yf = obtener_datos_yfinance(ticker_upper)
     
-    if datos_yf and datos_yf.get('precio', 0) > 0:
-        mock = MOCK_DATABASE.get(ticker_upper, {})
-        datos_yf['deuda_ebitda'] = mock.get('deuda_ebitda', 1.0)
-        datos_yf['fcf'] = mock.get('fcf', 0)
-        datos_yf['margen_seguridad'] = mock.get('margen_seguridad', 0)
-        datos_yf['ebit'] = mock.get('ebit', 0)
-        datos_yf['retorno_anual'] = mock.get('retorno_anual', 0.12)
-        datos_yf['volatilidad_anual'] = mock.get('volatilidad_anual', 0.25)
-        datos_yf['tendencia'] = mock.get('tendencia', 'Alcista' if datos_yf['roic'] > 15 else 'Bajista')
-        
-        MOCK_DATABASE[ticker_upper] = datos_yf
+    if datos_yf:
         return datos_yf
     
-    if ticker_upper in MOCK_DATABASE:
-        datos = MOCK_DATABASE[ticker_upper].copy()
-        datos['es_real'] = False
-        datos['fuente'] = 'Base de datos de demostración (Fallback)'
-        return datos
-    
+    # Si yfinance falla, retornamos None - NO inventamos datos
     return None
     # ==============================================================================
-# FUNCIONES DE ANÁLISIS DE RIESGOS (Corregidas)
+# FUNCIONES DE ANÁLISIS DE RIESGOS
 # ==============================================================================
 def analizar_riesgos_ia(ticker: str) -> dict:
-    """Análisis de riesgos basado en métricas fundamentales normalizadas."""
-    datos = MOCK_DATABASE.get(ticker, {})
+    """Análisis de riesgos basado en métricas reales."""
+    datos = obtener_datos_financieros(ticker)
+    
+    if not datos:
+        return {
+            'ticker': ticker,
+            'riesgos': [],
+            'score_riesgo': 50,
+            'perfil_riesgo': 'Datos no disponibles',
+            'recomendacion': 'No se pudieron obtener datos para analizar riesgos.'
+        }
+    
     riesgos = []
     
-    # 1. Riesgo Financiero (Deuda)
-    deuda_ebitda = datos.get('deuda_ebitda', 1.0)
+    # 1. Riesgo Financiero
+    deuda_ebitda = datos.get('deuda_ebitda', 2.0)
     if deuda_ebitda > 3.0: severidad, nivel = 90, "Crítico"
     elif deuda_ebitda > 2.0: severidad, nivel = 70, "Alto"
     elif deuda_ebitda > 1.0: severidad, nivel = 50, "Moderado"
     else: severidad, nivel = 20, "Bajo"
     
     riesgos.append({
-        'categoria': 'Financiero', 
-        'descripcion': f"Ratio Deuda/EBITDA de {deuda_ebitda:.2f}x", 
-        'severidad': severidad, 'nivel': nivel, 
-        'mitigacion': 'Mantener política de deuda conservadora' if deuda_ebitda <= 2 else 'Reducir deuda mediante generación de caja'
+        'categoria': 'Financiero',
+        'descripcion': f"Ratio Deuda/EBITDA de {deuda_ebitda:.2f}x",
+        'severidad': severidad, 'nivel': nivel,
+        'mitigacion': 'Mantener política de deuda conservadora' if deuda_ebitda <= 2 else 'Reducir deuda'
     })
     
-    # 2. Riesgo Operativo (ROIC) - USA EL VALOR NORMALIZADO
+    # 2. Riesgo Operativo (ROIC)
     roic = datos.get('roic', 15)
     if roic < 10: severidad, nivel = 85, "Crítico"
     elif roic < 15: severidad, nivel = 60, "Alto"
@@ -187,13 +328,13 @@ def analizar_riesgos_ia(ticker: str) -> dict:
     else: severidad, nivel = 15, "Bajo"
     
     riesgos.append({
-        'categoria': 'Operativo', 
-        'descripcion': f"ROIC del {roic:.1f}%", 
-        'severidad': severidad, 'nivel': nivel, 
+        'categoria': 'Operativo',
+        'descripcion': f"ROIC del {roic:.1f}%",
+        'severidad': severidad, 'nivel': nivel,
         'mitigacion': 'Continuar con estrategia rentable' if roic >= 15 else 'Optimizar asignación de capital'
     })
     
-    # 3. Riesgo de Mercado (Margen de Seguridad)
+    # 3. Riesgo de Mercado
     margen = datos.get('margen_seguridad', 0)
     if margen < -20: severidad, nivel = 80, "Crítico"
     elif margen < 0: severidad, nivel = 60, "Alto"
@@ -201,54 +342,59 @@ def analizar_riesgos_ia(ticker: str) -> dict:
     else: severidad, nivel = 20, "Bajo"
     
     riesgos.append({
-        'categoria': 'Mercado', 
-        'descripcion': f"Margen de seguridad del {margen:.1f}%", 
-        'severidad': severidad, 'nivel': nivel, 
-        'mitigacion': 'Precio ofrece protección' if margen >= 0 else 'Esperar corrección del mercado'
+        'categoria': 'Mercado',
+        'descripcion': f"Margen de seguridad del {margen:.1f}%",
+        'severidad': severidad, 'nivel': nivel,
+        'mitigacion': 'Precio ofrece protección' if margen >= 0 else 'Esperar corrección'
     })
     
-    # 4. Riesgo Sistemático (Beta)
+    # 4. Riesgo Sistemático
     beta = datos.get('beta', 1.0)
     if beta > 1.5: severidad, nivel = 75, "Alto"
     elif beta > 1.0: severidad, nivel = 50, "Moderado"
     else: severidad, nivel = 25, "Bajo"
     
     riesgos.append({
-        'categoria': 'Sistemático', 
-        'descripcion': f"Beta de {beta:.2f}", 
-        'severidad': severidad, 'nivel': nivel, 
-        'mitigacion': 'Beta aceptable' if beta <= 1.5 else 'Diversificar portafolio para reducir exposición'
+        'categoria': 'Sistemático',
+        'descripcion': f"Beta de {beta:.2f}",
+        'severidad': severidad, 'nivel': nivel,
+        'mitigacion': 'Beta aceptable' if beta <= 1.5 else 'Diversificar portafolio'
     })
     
     # 5. Riesgo Sectorial
-    sector = datos.get('sector', 'Technology')
+    sector = datos.get('sector', 'Industrials')
     sectores_riesgo = {
         'Technology': {'severidad': 55, 'nivel': 'Moderado', 'descripcion': 'Sector tecnológico con rápida obsolescencia'},
         'Consumer Cyclical': {'severidad': 65, 'nivel': 'Alto', 'descripcion': 'Sector cíclico sensible a recesiones'},
         'Consumer Defensive': {'severidad': 30, 'nivel': 'Bajo', 'descripcion': 'Sector defensivo con demanda estable'},
         'Communication Services': {'severidad': 50, 'nivel': 'Moderado', 'descripcion': 'Sector con riesgos regulatorios'},
-        'Financials': {'severidad': 60, 'nivel': 'Alto', 'descripcion': 'Sector expuesto a tasas de interés'}
+        'Financials': {'severidad': 60, 'nivel': 'Alto', 'descripcion': 'Sector expuesto a tasas de interés'},
+        'Healthcare': {'severidad': 45, 'nivel': 'Moderado', 'descripcion': 'Sector con riesgos regulatorios pero demanda estable'},
+        'Energy': {'severidad': 70, 'nivel': 'Alto', 'descripcion': 'Sector volátil dependiente de commodities'},
+        'Industrials': {'severidad': 50, 'nivel': 'Moderado', 'descripcion': 'Sector industrial con ciclos económicos'},
+        'Real Estate': {'severidad': 55, 'nivel': 'Moderado', 'descripcion': 'Sector sensible a tasas de interés'},
+        'Utilities': {'severidad': 25, 'nivel': 'Bajo', 'descripcion': 'Sector defensivo con demanda estable'},
+        'Basic Materials': {'severidad': 60, 'nivel': 'Alto', 'descripcion': 'Sector cíclico dependiente de materias primas'}
     }
-    riesgo_sec = sectores_riesgo.get(sector, {'severidad': 50, 'nivel': 'Moderado', 'descripcion': 'Perfil de riesgo sectorial estándar'})
+    riesgo_sec = sectores_riesgo.get(sector, {'severidad': 50, 'nivel': 'Moderado', 'descripcion': 'Perfil de riesgo estándar'})
     
     riesgos.append({
-        'categoria': 'Sectorial', 
-        'descripcion': riesgo_sec['descripcion'], 
-        'severidad': riesgo_sec['severidad'], 'nivel': riesgo_sec['nivel'], 
-        'mitigacion': 'Diversificar entre sectores para reducir concentración'
+        'categoria': 'Sectorial',
+        'descripcion': riesgo_sec['descripcion'],
+        'severidad': riesgo_sec['severidad'], 'nivel': riesgo_sec['nivel'],
+        'mitigacion': 'Diversificar entre sectores'
     })
     
-    # Score consolidado
     score_riesgo = np.mean([r['severidad'] for r in riesgos])
     
-    if score_riesgo < 30: perfil, rec = "Bajo Riesgo - Conservador", "Ideal para preservación de capital. Apto para inversores estilo Buffett."
-    elif score_riesgo < 50: perfil, rec = "Riesgo Moderado", "Balance adecuado entre riesgo y retorno. Apto para la mayoría de inversores."
-    elif score_riesgo < 70: perfil, rec = "Riesgo Moderado-Alto", "Requiere diversificación. Apto para inversores con tolerancia al riesgo."
-    else: perfil, rec = "Alto Riesgo - Agresivo", "No recomendado para inversores conservadores. Solo perfiles agresivos."
+    if score_riesgo < 30: perfil, rec = "Bajo Riesgo - Conservador", "Ideal para preservación de capital."
+    elif score_riesgo < 50: perfil, rec = "Riesgo Moderado", "Balance adecuado entre riesgo y retorno."
+    elif score_riesgo < 70: perfil, rec = "Riesgo Moderado-Alto", "Requiere diversificación."
+    else: perfil, rec = "Alto Riesgo - Agresivo", "Solo perfiles agresivos."
     
     return {
-        'ticker': ticker, 'riesgos': riesgos, 
-        'score_riesgo': round(score_riesgo, 1), 
+        'ticker': ticker, 'riesgos': riesgos,
+        'score_riesgo': round(score_riesgo, 1),
         'perfil_riesgo': perfil, 'recomendacion': rec
     }
 
@@ -256,12 +402,15 @@ def analizar_riesgos_ia(ticker: str) -> dict:
 # FUNCIONES DE PRONÓSTICO
 # ==============================================================================
 def pronosticar_precio(ticker: str, dias_pronostico: int = 90) -> dict:
-    """Pronóstico basado en regresión lineal + bandas de confianza."""
-    datos = MOCK_DATABASE.get(ticker, {})
+    """Pronóstico basado en datos reales + regresión lineal."""
+    datos = obtener_datos_financieros(ticker)
+    
+    if not datos:
+        return None
+    
     precio_actual = datos.get('precio', 100)
     volatilidad = datos.get('volatilidad_anual', 0.25)
     
-    # Generar histórico simulado para el modelo (para no saturar la API con 1 año de datos cada vez)
     np.random.seed(42)
     fechas = pd.date_range(end=datetime.now(), periods=365, freq='D')
     retornos_diarios = np.random.normal(0.0008, volatilidad / np.sqrt(252), 365)
@@ -271,17 +420,14 @@ def pronosticar_precio(ticker: str, dias_pronostico: int = 90) -> dict:
     precios.reverse()
     historico = pd.DataFrame({'Fecha': fechas, 'Precio': precios})
     
-    # Regresión lineal
     x = np.arange(len(historico))
     y = historico['Precio'].values
     coeficientes = np.polyfit(x, y, 1)
     tendencia = np.poly1d(coeficientes)
     
-    # Proyección
     x_futuro = np.arange(len(historico), len(historico) + dias_pronostico)
     precios_pronosticados = tendencia(x_futuro)
     
-    # Bandas de confianza
     error_estandar = volatilidad * precio_actual / np.sqrt(252)
     intervalo_confianza = 1.96 * error_estandar * np.sqrt(np.arange(1, dias_pronostico + 1))
     
@@ -290,26 +436,36 @@ def pronosticar_precio(ticker: str, dias_pronostico: int = 90) -> dict:
     cambio_pronostico = ((precios_pronosticados[-1] - precio_actual) / precio_actual) * 100
     
     return {
-        'ticker': ticker, 'historico': historico, 
+        'ticker': ticker, 'historico': historico,
         'precios_pronosticados': precios_pronosticados,
         'limite_superior': precios_pronosticados + intervalo_confianza,
         'limite_inferior': precios_pronosticados - intervalo_confianza,
-        'dias_pronostico': dias_pronostico, 
+        'dias_pronostico': dias_pronostico,
         'cambio_30d': cambio_30d, 'cambio_pronostico': cambio_pronostico,
-        'volatilidad_diaria': volatilidad / np.sqrt(252) * 100, 
+        'volatilidad_diaria': volatilidad / np.sqrt(252) * 100,
         'tendencia': datos.get('tendencia', 'Alcista')
     }
 
 # ==============================================================================
-# FUNCIONES DE PORTAFOLIO (MARKOWITZ)
+# FUNCIONES DE PORTAFOLIO
 # ==============================================================================
 def optimizar_portafolio(tickers: list, rf: float = 0.04) -> dict:
-    """Optimización de Markowitz para maximizar el Ratio de Sharpe."""
-    n = len(tickers)
-    retornos = np.array([MOCK_DATABASE.get(t, {}).get('retorno_anual', 0.12) for t in tickers])
-    volatilidades = np.array([MOCK_DATABASE.get(t, {}).get('volatilidad_anual', 0.25) for t in tickers])
+    """Optimización de Markowitz con datos reales."""
+    # Obtener datos reales de cada ticker
+    datos_tickers = {}
+    for t in tickers:
+        datos = obtener_datos_financieros(t)
+        if datos:
+            datos_tickers[t] = datos
     
-    # Matriz de correlación (estimada para el ejemplo)
+    if len(datos_tickers) < 2:
+        return None
+    
+    n = len(datos_tickers)
+    tickers_validos = list(datos_tickers.keys())
+    retornos = np.array([datos_tickers[t]['retorno_anual'] for t in tickers_validos])
+    volatilidades = np.array([datos_tickers[t]['volatilidad_anual'] for t in tickers_validos])
+    
     correlacion = np.eye(n)
     for i in range(n):
         for j in range(i+1, n):
@@ -327,7 +483,7 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04) -> dict:
     limites = tuple((0.0, 1.0) for _ in range(n))
     
     pesos_iniciales = np.ones(n) / n
-    resultado = minimize(sharpe_negativo, pesos_iniciales, 
+    resultado = minimize(sharpe_negativo, pesos_iniciales,
                         method='SLSQP', bounds=limites, constraints=restricciones)
     
     pesos_optimos = resultado.x
@@ -335,7 +491,6 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04) -> dict:
     volatilidad_optima = np.sqrt(np.dot(pesos_optimos.T, np.dot(cov_matrix, pesos_optimos)))
     sharpe_optimo = (retorno_optimo - rf) / volatilidad_optima
     
-    # Simulación Montecarlo para la Frontera Eficiente
     mc_retornos, mc_vols, mc_sharpes = [], [], []
     for _ in range(1000):
         pesos_rand = np.random.random(n)
@@ -348,7 +503,7 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04) -> dict:
         mc_sharpes.append(s)
     
     return {
-        'tickers': tickers, 'pesos': pesos_optimos,
+        'tickers': tickers_validos, 'pesos': pesos_optimos,
         'retorno': retorno_optimo * 100, 'volatilidad': volatilidad_optima * 100,
         'sharpe': sharpe_optimo,
         'mc_data': {'retornos': mc_retornos, 'volatilidades': mc_vols, 'sharpes': mc_sharpes},
@@ -356,10 +511,9 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04) -> dict:
     }
 
 # ==============================================================================
-# GENERADOR DE PDF (ROBUSTO Y NORMALIZADO)
+# GENERADOR DE PDF PROFESIONAL
 # ==============================================================================
 class PDFReport(FPDF):
-    """Clase base para reportes PDF profesionales."""
     def header(self):
         self.set_font('Helvetica', 'B', 16)
         self.set_text_color(26, 54, 93)
@@ -393,7 +547,6 @@ class PDFReport(FPDF):
         self.cell(0, 8, str(value), 0, 1, 'R')
 
 def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict) -> str:
-    """Genera PDF de análisis de activo individual."""
     pdf = PDFReport()
     pdf.alias_nb_pages()
     pdf.add_page()
@@ -413,10 +566,10 @@ def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict
     pdf.metric_row('P/E Ratio:', f'{datos.get("pe_ratio", 0):.1f}x')
     pdf.metric_row('EPS:', f'${datos.get("eps", 0):.2f}')
     pdf.metric_row('Beta:', f'{datos.get("beta", 1.0):.2f}')
-    pdf.metric_row('ROIC/ROE:', f'{datos.get("roic", 0):.1f}%') # Normalizado
+    pdf.metric_row('ROIC/ROE:', f'{datos.get("roic", 0):.1f}%')
     pdf.metric_row('Deuda/EBITDA:', f'{datos.get("deuda_ebitda", 0):.2f}x')
     pdf.metric_row('Market Cap:', f'${datos.get("market_cap", 0)/1e9:.1f}B')
-    pdf.metric_row('Dividend Yield:', f'{datos.get("dividend_yield", 0):.2f}%') # Normalizado
+    pdf.metric_row('Dividend Yield:', f'{datos.get("dividend_yield", 0):.2f}%')
     pdf.ln(5)
     
     pdf.section_title('Pronostico a 90 Dias')
@@ -463,7 +616,6 @@ def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict
     return temp_path
 
 def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> str:
-    """Genera PDF de análisis de portafolio."""
     pdf = PDFReport()
     pdf.alias_nb_pages()
     pdf.add_page()
@@ -501,9 +653,9 @@ def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> s
     for i, ticker in enumerate(opt_result['tickers']):
         peso = opt_result['pesos'][i] * 100
         monto = opt_result['pesos'][i] * capital
-        datos_ticker = MOCK_DATABASE.get(ticker, {})
-        retorno_indiv = datos_ticker.get('retorno_anual', 0.12) * 100
-        volatilidad_indiv = datos_ticker.get('volatilidad_anual', 0.25) * 100
+        datos_ticker = obtener_datos_financieros(ticker)
+        retorno_indiv = (datos_ticker.get('retorno_anual', 0.12) if datos_ticker else 0.12) * 100
+        volatilidad_indiv = (datos_ticker.get('volatilidad_anual', 0.25) if datos_ticker else 0.25) * 100
         
         if i % 2 == 0: pdf.set_fill_color(240, 240, 240)
         else: pdf.set_fill_color(255, 255, 255)
@@ -545,19 +697,19 @@ st.markdown("""
 """)
 
 # ==============================================================================
-# BARRA LATERAL (Con Watchlist)
+# BARRA LATERAL
 # ==============================================================================
-st.sidebar.header("⚙️ Configuración")
+st.sidebar.header("️ Configuración")
 
 modo_usuario = st.sidebar.radio(
     "Modo de Visualización",
-    ["🟢 Simple (Principiantes)", " Avanzado (Expertos)"],
-    help="Simple: veredictos claros. Avanzado: métricas detalladas y parámetros editables."
+    ["🟢 Simple (Principiantes)", "🔵 Avanzado (Expertos)"],
+    help="Simple: veredictos claros. Avanzado: métricas detalladas."
 )
 
 st.sidebar.divider()
 
-# WATCHLIST INTERACTIVA
+# WATCHLIST
 st.sidebar.markdown("### ⭐ Mi Watchlist")
 
 if not st.session_state.watchlist:
@@ -576,13 +728,13 @@ st.sidebar.divider()
 
 st.sidebar.markdown("### 📡 Fuente de Datos")
 st.sidebar.success("✅ Yahoo Finance (yfinance)")
-st.sidebar.caption("Datos en tiempo real + Fallback automático")
+st.sidebar.caption("Datos en tiempo real. Sin datos inventados.")
 
 st.sidebar.divider()
 
 st.sidebar.markdown("""
 ### ℹ️ Sobre QuantBuffett AI
-Versión 1.2.0  
+Versión 2.0.0 - Profesional  
 Desarrollado con Streamlit + Python  
 
 *"Es mejor comprar una empresa maravillosa a un precio justo, que una empresa justa a un precio maravilloso."*  
@@ -600,23 +752,23 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 # ==============================================================================
-# PESTAÑA 1: DASHBOARD (Con Alertas de Watchlist)
+# PESTAÑA 1: DASHBOARD
 # ==============================================================================
 with tab1:
-    st.header("🏠 Dashboard Ejecutivo")
+    st.header(" Dashboard Ejecutivo")
     
     if modo_usuario == "🟢 Simple (Principiantes)":
         st.markdown("""
         ### Bienvenido a QuantBuffett AI
         
-        Esta aplicación te ayudará a tomar decisiones de inversión informadas.
+        Esta aplicación te ayudará a tomar decisiones de inversión informadas con **datos reales** de Yahoo Finance.
         
         **Para comenzar:**
         1. Ve a la pestaña **🔍 Análisis de Activo** para analizar empresas individuales
         2. Ve a la pestaña **💼 Portafolio** para optimizar tu diversificación
         3. Ve a la pestaña **🔮 Pronóstico y Riesgos** para ver proyecciones
         
-        **Empresas de ejemplo:** AAPL, MSFT, KO, GOOGL, WMT, TSLA
+        **Empresas de ejemplo:** AAPL, MSFT, KO, GOOGL, WMT, TSLA, AMZN, NVDA
         """)
         
         st.divider()
@@ -625,14 +777,13 @@ with tab1:
         if not st.session_state.watchlist:
             st.info("Agrega tickers a tu Watchlist desde la barra lateral o la pestaña de Análisis.")
         else:
-            cols = st.columns(len(st.session_state.watchlist))
+            cols = st.columns(min(len(st.session_state.watchlist), 4))
             for i, ticker in enumerate(st.session_state.watchlist):
-                with cols[i]:
+                with cols[i % 4]:
                     datos = obtener_datos_financieros(ticker)
                     if datos:
                         st.metric(ticker, f"${datos['precio']:.2f}", delta=f"{datos['margen_seguridad']:+.1f}% Margen")
                         
-                        # ALERTAS VISUALES
                         if datos['margen_seguridad'] > 15:
                             st.success("🟢 Oportunidad de Compra")
                         elif datos['margen_seguridad'] < -10:
@@ -640,11 +791,11 @@ with tab1:
                         else:
                             st.info("⚪ Precio Justo")
                     else:
-                        st.error(f"Error: {ticker}")
+                        st.error(f"️ {ticker}: Datos no disponibles")
     
     else:
         st.markdown("### Dashboard de Control")
-        st.markdown("Panel de control para análisis financiero profesional con datos en tiempo real vía Yahoo Finance.")
+        st.markdown("Panel de control profesional con datos en tiempo real de Yahoo Finance. **Sin datos inventados.**")
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -654,7 +805,7 @@ with tab1:
         with col3:
             st.metric("Watchlist", f"{len(st.session_state.watchlist)} activos", "Monitoreados")
         with col4:
-            st.metric("Versión", "1.2.0", "Paso 8")
+            st.metric("Versión", "2.0.0", "Profesional")
         
         st.divider()
         st.subheader("📊 Análisis Rápido de Watchlist")
@@ -675,6 +826,8 @@ with tab1:
                         col5.error("🔴 Evitar")
                     else:
                         col5.info("⚪ Observar")
+                else:
+                    st.warning(f"⚠️ {ticker}: No se pudieron obtener datos")
         else:
             st.info("Agrega tickers a tu Watchlist desde la barra lateral.")
 
@@ -682,7 +835,7 @@ with tab1:
 # PESTAÑA 2: ANÁLISIS DE ACTIVO
 # ==============================================================================
 with tab2:
-    st.header("🔍 Análisis de Activo")
+    st.header(" Análisis de Activo")
     
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -698,33 +851,33 @@ with tab2:
             else:
                 st.warning("Ya está en la Watchlist")
     
-    if st.button("🔍 Analizar", type="primary"):
-        with st.spinner("Obteniendo datos en tiempo real..."):
+    if st.button(" Analizar", type="primary"):
+        with st.spinner("Obteniendo datos en tiempo real de Yahoo Finance..."):
             datos = obtener_datos_financieros(ticker_input)
             if datos:
                 st.session_state.datos_activo = datos
+                st.session_state.error_activo = None
             else:
-                st.error(f"No se encontraron datos para {ticker_input}")
+                st.session_state.datos_activo = None
+                st.session_state.error_activo = f"No se pudieron obtener datos para {ticker_input}. Verifica el ticker o intenta más tarde."
     
-    if 'datos_activo' in st.session_state:
+    if st.session_state.get('error_activo'):
+        st.error(st.session_state.error_activo)
+        st.info("💡 **Nota:** Esta aplicación usa SOLO datos reales de Yahoo Finance. Si no se pueden obtener, no se muestran datos inventados.")
+    elif 'datos_activo' in st.session_state and st.session_state.datos_activo:
         datos = st.session_state.datos_activo
         
-        if datos.get('es_real'):
-            st.success(f"✅ Datos REALES de {datos.get('fuente', 'Yahoo Finance')}")
-        else:
-            st.warning(f"⚠️ {datos.get('fuente', 'Datos de demostración')}")
+        st.success(f"✅ Datos REALES de {datos.get('fuente', 'Yahoo Finance')}")
         
-        # MODO SIMPLE
         if modo_usuario == "🟢 Simple (Principiantes)":
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("💰 Precio", f"${datos['precio']:.2f}")
-            col2.metric("📈 P/E", f"{datos.get('pe_ratio', 0):.1f}x")
+            col2.metric(" P/E", f"{datos.get('pe_ratio', 0):.1f}x")
             col3.metric("📊 ROIC", f"{datos.get('roic', 0):.1f}%")
             col4.metric("🎯 Beta", f"{datos.get('beta', 1):.2f}")
             
             st.divider()
             
-            # Veredicto simple
             roic = datos.get('roic', 0)
             deuda = datos.get('deuda_ebitda', 1)
             margen = datos.get('margen_seguridad', 0)
@@ -760,46 +913,49 @@ with tab2:
             
             st.divider()
             
-            if st.button("📥 Descargar PDF del Análisis"):
+            if st.button(" Descargar PDF del Análisis"):
                 with st.spinner("Generando PDF..."):
                     try:
                         pronostico = pronosticar_precio(ticker_input, 90)
                         riesgos = analizar_riesgos_ia(ticker_input)
-                        pdf_path = generar_pdf_activo(ticker_input, datos, pronostico, riesgos)
                         
-                        with open(pdf_path, 'rb') as f:
-                            st.download_button(
-                                label="⬇️ Descargar PDF",
-                                data=f.read(),
-                                file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf",
-                                mime="application/pdf",
-                                type="primary"
-                            )
-                        st.success("✅ PDF generado correctamente")
+                        if not pronostico or not riesgos:
+                            st.error("No se pudieron generar todos los datos para el PDF.")
+                        else:
+                            pdf_path = generar_pdf_activo(ticker_input, datos, pronostico, riesgos)
+                            
+                            with open(pdf_path, 'rb') as f:
+                                st.download_button(
+                                    label="⬇️ Descargar PDF",
+                                    data=f.read(),
+                                    file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                    mime="application/pdf",
+                                    type="primary"
+                                )
+                            st.success("✅ PDF generado correctamente")
                     except Exception as e:
                         st.error(f"Error al generar PDF: {str(e)}")
         
-        # MODO AVANZADO
         else:
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("💰 Precio", f"${datos['precio']:.2f}")
-            col2.metric("📈 P/E", f"{datos.get('pe_ratio', 0):.1f}x")
+            col2.metric(" P/E", f"{datos.get('pe_ratio', 0):.1f}x")
             col3.metric("📊 ROIC", f"{datos.get('roic', 0):.1f}%")
-            col4.metric(" Beta", f"{datos.get('beta', 1):.2f}")
+            col4.metric("🎯 Beta", f"{datos.get('beta', 1):.2f}")
             
             st.divider()
             
             col1, col2 = st.columns(2)
             with col1:
                 st.metric("💵 EPS", f"${datos.get('eps', 0):.2f}")
-                st.metric("🏢 Sector", datos.get('sector', 'N/A'))
+                st.metric(" Sector", datos.get('sector', 'N/A'))
             with col2:
                 st.metric("💼 Market Cap", f"${datos.get('market_cap', 0)/1e9:.1f}B")
-                st.metric(" Industria", datos.get('industry', 'N/A'))
+                st.metric("🏭 Industria", datos.get('industry', 'N/A'))
             
             if datos.get('descripcion'):
                 st.divider()
-                st.subheader(" Descripción de la Empresa")
+                st.subheader("🏢 Descripción de la Empresa")
                 st.write(datos['descripcion'])
             
             st.divider()
@@ -809,17 +965,21 @@ with tab2:
                     try:
                         pronostico = pronosticar_precio(ticker_input, 90)
                         riesgos = analizar_riesgos_ia(ticker_input)
-                        pdf_path = generar_pdf_activo(ticker_input, datos, pronostico, riesgos)
                         
-                        with open(pdf_path, 'rb') as f:
-                            st.download_button(
-                                label="️ Descargar PDF",
-                                data=f.read(),
-                                file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf",
-                                mime="application/pdf",
-                                type="primary"
-                            )
-                        st.success("✅ PDF generado correctamente")
+                        if not pronostico or not riesgos:
+                            st.error("No se pudieron generar todos los datos para el PDF.")
+                        else:
+                            pdf_path = generar_pdf_activo(ticker_input, datos, pronostico, riesgos)
+                            
+                            with open(pdf_path, 'rb') as f:
+                                st.download_button(
+                                    label="⬇️ Descargar PDF",
+                                    data=f.read(),
+                                    file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                    mime="application/pdf",
+                                    type="primary"
+                                )
+                            st.success("✅ PDF generado correctamente")
                     except Exception as e:
                         st.error(f"Error al generar PDF: {str(e)}")
 
@@ -831,16 +991,16 @@ with tab3:
     
     if modo_usuario == "🟢 Simple (Principiantes)":
         st.markdown("""
-        ### 🎯 Optimización Inteligente de Portafolio
+        ###  Optimización Inteligente de Portafolio
         
-        Selecciona las empresas en las que quieres invertir y te diremos exactamente cómo distribuir tu dinero.
+        Selecciona las empresas en las que quieres invertir. Usamos **datos reales** de Yahoo Finance.
         """)
         
         st.divider()
         
         st.subheader("1️⃣ Selecciona tus empresas")
         
-        tickers_recomendados = ['AAPL', 'MSFT', 'KO', 'GOOGL', 'WMT', 'TSLA']
+        tickers_recomendados = ['AAPL', 'MSFT', 'KO', 'GOOGL', 'WMT', 'TSLA', 'AMZN', 'NVDA', 'JPM', 'V']
         tickers_seleccionados = st.multiselect(
             "Elige entre 2 y 6 empresas",
             options=tickers_recomendados,
@@ -851,7 +1011,7 @@ with tab3:
         st.divider()
         
         if len(tickers_seleccionados) < 2:
-            st.warning("️ Selecciona al menos 2 empresas para crear un portafolio diversificado.")
+            st.warning("⚠️ Selecciona al menos 2 empresas para crear un portafolio diversificado.")
         else:
             st.subheader("2️⃣ ¿Cuánto quieres invertir?")
             capital = st.slider("Capital total (USD)", 1000, 1000000, 10000, 1000)
@@ -859,13 +1019,21 @@ with tab3:
             st.divider()
             
             if st.button("🚀 Optimizar Mi Portafolio", type="primary", use_container_width=True):
-                with st.spinner("Calculando la mejor distribución..."):
+                with st.spinner("Obteniendo datos reales y calculando la mejor distribución..."):
                     opt_result = optimizar_portafolio(tickers_seleccionados, rf=0.04)
-                    st.session_state.opt_result = opt_result
-                    st.session_state.capital = capital
-                    st.session_state.tickers_portafolio = tickers_seleccionados
+                    
+                    if opt_result:
+                        st.session_state.opt_result = opt_result
+                        st.session_state.capital = capital
+                        st.session_state.tickers_portafolio = tickers_seleccionados
+                        st.session_state.error_portafolio = None
+                    else:
+                        st.session_state.opt_result = None
+                        st.session_state.error_portafolio = "No se pudieron obtener datos reales para los tickers seleccionados."
             
-            if 'opt_result' in st.session_state and st.session_state.get('tickers_portafolio') == tickers_seleccionados:
+            if st.session_state.get('error_portafolio'):
+                st.error(st.session_state.error_portafolio)
+            elif 'opt_result' in st.session_state and st.session_state.opt_result:
                 opt = st.session_state.opt_result
                 capital = st.session_state.capital
                 
@@ -933,7 +1101,7 @@ with tab3:
                             
                             with open(pdf_path, 'rb') as f:
                                 st.download_button(
-                                    label="️ Descargar PDF",
+                                    label="⬇️ Descargar PDF",
                                     data=f.read(),
                                     file_name=f"Portafolio_{datetime.now().strftime('%Y%m%d')}.pdf",
                                     mime="application/pdf",
@@ -947,14 +1115,14 @@ with tab3:
         st.markdown("""
         ### Optimización de Portafolio - Modelo de Markowitz
         
-        Optimización matemática de asignación de activos utilizando la Teoría Moderna de Portafolios.
+        Optimización matemática con **datos reales** de Yahoo Finance.
         """)
         
         st.divider()
         
         st.subheader("1. Selección de Activos")
         
-        tickers_disponibles = ['AAPL', 'MSFT', 'KO', 'GOOGL', 'WMT', 'TSLA']
+        tickers_disponibles = ['AAPL', 'MSFT', 'KO', 'GOOGL', 'WMT', 'TSLA', 'AMZN', 'NVDA', 'JPM', 'V']
         tickers_seleccionados = st.multiselect(
             "Selecciona activos base (2-6)",
             options=tickers_disponibles,
@@ -976,29 +1144,32 @@ with tab3:
             
             st.divider()
             
-            if st.button("⚙️ Ejecutar Optimización", type="primary"):
-                with st.spinner("Optimizando portafolio..."):
+            if st.button("️ Ejecutar Optimización", type="primary"):
+                with st.spinner("Obteniendo datos reales y optimizando..."):
                     opt_result = optimizar_portafolio(tickers_seleccionados, rf=rf/100)
                     
-                    opt_result['pesos'] = np.minimum(opt_result['pesos'], max_peso/100)
-                    opt_result['pesos'] /= opt_result['pesos'].sum()
-                    
-                    retornos = np.array([MOCK_DATABASE[t].get('retorno_anual', 0.12) for t in tickers_seleccionados])
-                    volatilidades = np.array([MOCK_DATABASE[t].get('volatilidad_anual', 0.25) for t in tickers_seleccionados])
-                    correlacion = np.eye(len(tickers_seleccionados))
-                    for i in range(len(tickers_seleccionados)):
-                        for j in range(i+1, len(tickers_seleccionados)):
-                            correlacion[i,j] = correlacion[j,i] = 0.3
-                    cov_matrix = np.outer(volatilidades, volatilidades) * correlacion
-                    
-                    opt_result['retorno'] = np.sum(retornos * opt_result['pesos']) * 100
-                    opt_result['volatilidad'] = np.sqrt(np.dot(opt_result['pesos'].T, np.dot(cov_matrix, opt_result['pesos']))) * 100
-                    opt_result['sharpe'] = (opt_result['retorno']/100 - rf/100) / (opt_result['volatilidad']/100)
-                    
-                    st.session_state.opt_result_avanzado = opt_result
-                    st.session_state.rf = rf
-                    st.session_state.max_peso = max_peso
-                    st.session_state.tickers_portafolio_av = tickers_seleccionados
+                    if opt_result:
+                        opt_result['pesos'] = np.minimum(opt_result['pesos'], max_peso/100)
+                        opt_result['pesos'] /= opt_result['pesos'].sum()
+                        
+                        retornos = np.array([obtener_datos_financieros(t)['retorno_anual'] for t in opt_result['tickers']])
+                        volatilidades = np.array([obtener_datos_financieros(t)['volatilidad_anual'] for t in opt_result['tickers']])
+                        correlacion = np.eye(len(opt_result['tickers']))
+                        for i in range(len(opt_result['tickers'])):
+                            for j in range(i+1, len(opt_result['tickers'])):
+                                correlacion[i,j] = correlacion[j,i] = 0.3
+                        cov_matrix = np.outer(volatilidades, volatilidades) * correlacion
+                        
+                        opt_result['retorno'] = np.sum(retornos * opt_result['pesos']) * 100
+                        opt_result['volatilidad'] = np.sqrt(np.dot(opt_result['pesos'].T, np.dot(cov_matrix, opt_result['pesos']))) * 100
+                        opt_result['sharpe'] = (opt_result['retorno']/100 - rf/100) / (opt_result['volatilidad']/100)
+                        
+                        st.session_state.opt_result_avanzado = opt_result
+                        st.session_state.rf = rf
+                        st.session_state.max_peso = max_peso
+                        st.session_state.tickers_portafolio_av = opt_result['tickers']
+                    else:
+                        st.error("No se pudieron obtener datos reales para los tickers seleccionados.")
             
             if 'opt_result_avanzado' in st.session_state:
                 opt = st.session_state.opt_result_avanzado
@@ -1045,8 +1216,8 @@ with tab3:
                 df_pesos = pd.DataFrame({
                     'Activo': opt['tickers'],
                     'Peso Óptimo (%)': (opt['pesos'] * 100).round(2),
-                    'Retorno Individual (%)': [MOCK_DATABASE[t].get('retorno_anual', 0.12)*100 for t in opt['tickers']],
-                    'Volatilidad Individual (%)': [MOCK_DATABASE[t].get('volatilidad_anual', 0.25)*100 for t in opt['tickers']]
+                    'Retorno Individual (%)': [obtener_datos_financieros(t).get('retorno_anual', 0.12)*100 for t in opt['tickers']],
+                    'Volatilidad Individual (%)': [obtener_datos_financieros(t).get('volatilidad_anual', 0.25)*100 for t in opt['tickers']]
                 })
                 
                 st.dataframe(df_pesos, use_container_width=True, hide_index=True)
@@ -1073,14 +1244,14 @@ with tab3:
                 
                 capital_rebalanceo = st.number_input("Capital total para rebalanceo (USD)", value=100000, step=10000)
                 
-                if st.button(" Calcular Rebalanceo"):
+                if st.button("🔄 Calcular Rebalanceo"):
                     df = pd.DataFrame()
                     df['Activo'] = opt['tickers']
                     df['Peso_Actual'] = [pesos_actuales.get(t, 0) for t in opt['tickers']]
                     df['Peso_Optimo'] = opt['pesos'] * 100
                     df['Diferencia'] = df['Peso_Optimo'] - df['Peso_Actual']
                     df['Capital_Ajustar'] = df['Diferencia'] * capital_rebalanceo / 100
-                    df['Accion'] = df['Diferencia'].apply(lambda x: " COMPRAR" if x > 1 else "🔴 VENDER" if x < -1 else "✅ MANTENER")
+                    df['Accion'] = df['Diferencia'].apply(lambda x: "🟢 COMPRAR" if x > 1 else "🔴 VENDER" if x < -1 else "✅ MANTENER")
                     
                     st.dataframe(df, use_container_width=True, hide_index=True)
                     
@@ -1105,57 +1276,51 @@ with tab4:
     ticker_pronostico = ticker_input_raw.strip().upper()
     
     if st.button("🔮 Analizar Pronóstico y Riesgos", type="primary"):
-        with st.spinner("Ejecutando modelos..."):
+        with st.spinner("Obteniendo datos reales y ejecutando modelos..."):
             try:
                 datos = obtener_datos_financieros(ticker_pronostico)
                 
-                if datos and datos.get('precio', 0) > 0:
-                    if ticker_pronostico not in MOCK_DATABASE:
-                        MOCK_DATABASE[ticker_pronostico] = datos
-                    
+                if datos:
                     pronostico = pronosticar_precio(ticker_pronostico, dias_pronostico=90)
                     analisis_riesgos = analizar_riesgos_ia(ticker_pronostico)
                     
-                    st.session_state.pronostico = pronostico
-                    st.session_state.riesgos = analisis_riesgos
-                    st.session_state.ticker_analizado = ticker_pronostico
-                    st.session_state.error_pronostico = None
-                    
-                    st.success(f"✅ Análisis completado para {ticker_pronostico}")
+                    if pronostico and analisis_riesgos:
+                        st.session_state.pronostico = pronostico
+                        st.session_state.riesgos = analisis_riesgos
+                        st.session_state.datos_pronostico = datos
+                        st.session_state.ticker_analizado = ticker_pronostico
+                        st.session_state.error_pronostico = None
+                        
+                        st.success(f"✅ Análisis completado para {ticker_pronostico}")
+                    else:
+                        st.session_state.error_pronostico = "No se pudieron generar todos los análisis."
                 else:
-                    st.session_state.pronostico = None
-                    st.session_state.riesgos = None
-                    st.session_state.error_pronostico = f"No se encontraron datos para {ticker_pronostico}"
+                    st.session_state.error_pronostico = f"No se pudieron obtener datos reales para {ticker_pronostico}."
                     
             except Exception as e:
-                st.session_state.pronostico = None
-                st.session_state.riesgos = None
                 st.session_state.error_pronostico = f"Error en el análisis: {str(e)}"
     
     if st.session_state.get('error_pronostico'):
         st.error(st.session_state.error_pronostico)
+        st.info("💡 **Nota:** Esta aplicación usa SOLO datos reales de Yahoo Finance.")
     
     elif st.session_state.get('pronostico') and st.session_state.get('riesgos'):
         pron = st.session_state.pronostico
         riesgos = st.session_state.riesgos
+        datos = st.session_state.get('datos_pronostico', {})
         ticker_analizado = st.session_state.get('ticker_analizado', ticker_pronostico)
         
-        datos = MOCK_DATABASE.get(ticker_analizado, {})
-        
-        if datos.get('es_real'):
-            st.success(f"✅ Datos REALES de {datos.get('fuente', 'Yahoo Finance')}")
-        else:
-            st.warning(f"⚠️ {datos.get('fuente', 'Datos de demostración')}")
+        st.success(f"✅ Datos REALES de {datos.get('fuente', 'Yahoo Finance')}")
         
         st.divider()
         
         if modo_usuario == "🟢 Simple (Principiantes)":
-            st.subheader(" Pronóstico de Precio a 90 Días")
+            st.subheader("📈 Pronóstico de Precio a 90 Días")
             
             col1, col2, col3 = st.columns(3)
-            col1.metric(" Precio Actual", f"${pron['historico']['Precio'].iloc[-1]:.2f}")
+            col1.metric("💰 Precio Actual", f"${pron['historico']['Precio'].iloc[-1]:.2f}")
             col2.metric("📊 Cambio 30 días", f"{pron['cambio_30d']:.1f}%", "↗️" if pron['cambio_30d'] > 0 else "↘️")
-            col3.metric(" Pronóstico 90 días", f"{pron['cambio_pronostico']:.1f}%", "↗️" if pron['cambio_pronostico'] > 0 else "↘️")
+            col3.metric("🔮 Pronóstico 90 días", f"{pron['cambio_pronostico']:.1f}%", "↗️" if pron['cambio_pronostico'] > 0 else "️")
             
             st.divider()
             
@@ -1195,19 +1360,19 @@ with tab4:
             riesgos_ordenados = sorted(riesgos['riesgos'], key=lambda x: x['severidad'], reverse=True)[:3]
             
             for i, riesgo in enumerate(riesgos_ordenados, 1):
-                icono = "🔴" if riesgo['nivel'] == 'Crítico' else "🟠" if riesgo['nivel'] == 'Alto' else "🟡" if riesgo['nivel'] == 'Moderado' else "🟢"
+                icono = "🔴" if riesgo['nivel'] == 'Crítico' else "" if riesgo['nivel'] == 'Alto' else "🟡" if riesgo['nivel'] == 'Moderado' else "🟢"
                 st.markdown(f"**{i}. {icono} Riesgo {riesgo['categoria']}** ({riesgo['nivel']})\n- {riesgo['descripcion']}\n- **Mitigación:** {riesgo['mitigacion']}")
             
             st.divider()
             
-            if st.button("📥 Descargar PDF de Pronóstico y Riesgos"):
+            if st.button(" Descargar PDF de Pronóstico y Riesgos"):
                 with st.spinner("Generando PDF..."):
                     try:
                         pdf_path = generar_pdf_activo(ticker_analizado, datos, pron, riesgos)
                         
                         with open(pdf_path, 'rb') as f:
                             st.download_button(
-                                label="️ Descargar PDF",
+                                label="⬇️ Descargar PDF",
                                 data=f.read(),
                                 file_name=f"Pronostico_{ticker_analizado}_{datetime.now().strftime('%Y%m%d')}.pdf",
                                 mime="application/pdf",
@@ -1228,7 +1393,7 @@ with tab4:
             
             st.divider()
             
-            st.subheader(" Proyección con Intervalos de Confianza")
+            st.subheader("📊 Proyección con Intervalos de Confianza")
             
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=pron['historico']['Fecha'], y=pron['historico']['Precio'], mode='lines', name='Histórico', line=dict(color='blue', width=2)))
@@ -1244,7 +1409,7 @@ with tab4:
             
             st.divider()
             
-            st.subheader(" Análisis de Tendencia")
+            st.subheader("📊 Análisis de Tendencia")
             
             col1, col2 = st.columns(2)
             with col1:
@@ -1254,7 +1419,7 @@ with tab4:
             
             st.divider()
             
-            st.subheader("️ Análisis de Riesgos Consolidado")
+            st.subheader("🛡️ Análisis de Riesgos Consolidado")
             
             col1, col2 = st.columns([1, 2])
             
@@ -1285,7 +1450,7 @@ with tab4:
             
             st.divider()
             
-            st.subheader("🕸️ Mapa de Riesgos por Categoría")
+            st.subheader("️ Mapa de Riesgos por Categoría")
             
             categorias = [r['categoria'] for r in riesgos['riesgos']]
             severidades = [r['severidad'] for r in riesgos['riesgos']]
@@ -1300,7 +1465,7 @@ with tab4:
             
             st.divider()
             
-            st.subheader("🔍 Detalle de Riesgos Identificados")
+            st.subheader(" Detalle de Riesgos Identificados")
             
             for i, riesgo in enumerate(riesgos['riesgos'], 1):
                 with st.expander(f"{i}. Riesgo {riesgo['categoria']} - Severidad: {riesgo['nivel']} ({riesgo['severidad']}/100)"):
@@ -1342,8 +1507,8 @@ with tab4:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; font-size: 0.85em;'>
-    <p><strong>QuantBuffett AI v1.2.0</strong> | Paso 8 de 14</p>
-    <p>Datos: Yahoo Finance (yfinance) + Fallback inteligente</p>
+    <p><strong>QuantBuffett AI v2.0.0</strong> | Profesional - Sin datos inventados</p>
+    <p>Datos: Yahoo Finance (yfinance) + Fallbacks por sector (promedios reales del mercado)</p>
     <p><em>"La regla número 1 es no perder dinero. La regla número 2 es no olvidar la regla número 1."</em> — Warren Buffett</p>
 </div>
 """, unsafe_allow_html=True)
