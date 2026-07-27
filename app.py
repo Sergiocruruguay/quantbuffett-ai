@@ -1257,7 +1257,7 @@ with tab3:
                             st.success(f"**Comprar:** {', '.join(comprar['Activo'].tolist())}")
                     with col2:
                         if not vender.empty:
-                            st.error(f"**Vender:** {', '.join(vender['Activo'].tolist())")
+                            st.error(f"**Vender:** {', '.join(vender['Activo'].tolist())}")
 
 # ==============================================================================
 # PESTAÑA 4: PRONÓSTICO Y RIESGOS
