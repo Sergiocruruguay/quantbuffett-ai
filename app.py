@@ -1003,7 +1003,7 @@ with tab2:
 with tab3:
     st.header("💼 Optimizador de Portafolio")
     
-    if modo_usuario == "🟢 Simple (Principiantes)":
+    if modo_usuario == " Simple (Principiantes)":
         st.markdown("""
         ### 🎯 Optimización Inteligente de Portafolio
         
@@ -1012,15 +1012,59 @@ with tab3:
         
         st.divider()
         
+        # ==============================================================================
+        # SISTEMA DE TICKERS DINÁMICOS - MODO SIMPLE
+        # ==============================================================================
         st.subheader("1️⃣ Selecciona tus empresas")
         
-        tickers_recomendados = ['AAPL', 'MSFT', 'KO', 'GOOGL', 'WMT', 'TSLA', 'AMZN', 'NVDA', 'JPM', 'V']
+        # Inicializar lista de tickers personalizados en sesión
+        if 'tickers_personalizados' not in st.session_state:
+            st.session_state.tickers_personalizados = []
+        
+        TICKERS_SUGERIDOS = ['AAPL', 'MSFT', 'KO', 'GOOGL', 'WMT', 'TSLA', 'AMZN', 'NVDA', 'JPM', 'V']
+        todos_los_tickers = list(set(TICKERS_SUGERIDOS + st.session_state.tickers_personalizados))
+        todos_los_tickers.sort()
+        
         tickers_seleccionados = st.multiselect(
             "Elige entre 2 y 6 empresas",
-            options=tickers_recomendados,
-            default=['AAPL', 'MSFT', 'KO'],
+            options=todos_los_tickers,
+            default=['AAPL', 'MSFT', 'KO'] if len(todos_los_tickers) >= 3 else todos_los_tickers[:2],
             help="Selecciona al menos 2 empresas para diversificar"
         )
+        
+        st.divider()
+        
+        # Agregar ticker personalizado
+        st.markdown("**¿No encuentras tu ticker? Agrégalo aquí:**")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            ticker_nuevo = st.text_input(
+                "Ingresa el ticker (ej: META, DIS, NFLX, BA)",
+                placeholder="Ej: META",
+                help="El ticker debe existir en Yahoo Finance"
+            ).upper().strip()
+        
+        with col2:
+            st.write("")
+            st.write("")
+            if st.button("➕ Agregar Ticker", use_container_width=True):
+                if not ticker_nuevo:
+                    st.error("Ingresa un ticker válido")
+                elif ticker_nuevo in todos_los_tickers:
+                    st.warning(f"{ticker_nuevo} ya está en la lista")
+                else:
+                    with st.spinner(f"Verificando {ticker_nuevo}..."):
+                        try:
+                            stock_test = yf.Ticker(ticker_nuevo)
+                            info_test = stock_test.info
+                            if info_test.get('currentPrice') or info_test.get('regularMarketPrice'):
+                                st.session_state.tickers_personalizados.append(ticker_nuevo)
+                                st.success(f"✅ {ticker_nuevo} agregado correctamente")
+                                st.rerun()
+                            else:
+                                st.error(f" {ticker_nuevo} no encontrado en Yahoo Finance")
+                        except Exception as e:
+                            st.error(f"❌ Error al verificar {ticker_nuevo}")
         
         st.divider()
         
@@ -1061,7 +1105,7 @@ with tab3:
                 
                 st.divider()
                 
-                st.subheader("🥧 Distribución Recomendada")
+                st.subheader(" Distribución Recomendada")
                 
                 df_pesos = pd.DataFrame({
                     'Empresa': opt['tickers'],
@@ -1086,7 +1130,7 @@ with tab3:
                 
                 st.divider()
                 
-                st.subheader(" ¿Qué significa esto?")
+                st.subheader("💡 ¿Qué significa esto?")
                 
                 if opt['sharpe'] > 1.0:
                     st.success(f"**Excelente portafolio!** Con un Ratio de Sharpe de {opt['sharpe']:.2f}, este portafolio ofrece muy buen retorno por cada unidad de riesgo asumido.")
@@ -1097,12 +1141,12 @@ with tab3:
                 
                 st.divider()
                 
-                st.subheader("🎯 Perfil de Este Portafolio")
+                st.subheader(" Perfil de Este Portafolio")
                 
                 if opt['volatilidad'] < 15:
-                    st.markdown("**Conservador** 🟢\nEste portafolio está diseñado para proteger tu capital. Ideal si tu horizonte de inversión es corto (1-3 años).")
+                    st.markdown("**Conservador** \nEste portafolio está diseñado para proteger tu capital. Ideal si tu horizonte de inversión es corto (1-3 años).")
                 elif opt['volatilidad'] < 25:
-                    st.markdown("**Moderado** \nEste portafolio balancea crecimiento y estabilidad. Ideal si tu horizonte de inversión es mediano (3-7 años).")
+                    st.markdown("**Moderado** 🟡\nEste portafolio balancea crecimiento y estabilidad. Ideal si tu horizonte de inversión es mediano (3-7 años).")
                 else:
                     st.markdown("**Agresivo** 🔴\nEste portafolio busca maximizar ganancias aceptando mayor volatilidad. Ideal si tu horizonte de inversión es largo (+7 años).")
                 
@@ -1115,7 +1159,7 @@ with tab3:
                             
                             with open(pdf_path, 'rb') as f:
                                 st.download_button(
-                                    label="⬇️ Descargar PDF",
+                                    label="️ Descargar PDF",
                                     data=f.read(),
                                     file_name=f"Portafolio_{datetime.now().strftime('%Y%m%d')}.pdf",
                                     mime="application/pdf",
@@ -1126,6 +1170,9 @@ with tab3:
                             st.error(f"Error al generar PDF: {str(e)}")
     
     else:
+        # ==============================================================================
+        # MODO AVANZADO
+        # ==============================================================================
         st.markdown("""
         ### Optimización de Portafolio - Modelo de Markowitz
         
@@ -1134,14 +1181,59 @@ with tab3:
         
         st.divider()
         
+        # ==============================================================================
+        # SISTEMA DE TICKERS DINÁMICOS - MODO AVANZADO
+        # ==============================================================================
         st.subheader("1. Selección de Activos")
         
-        tickers_disponibles = ['AAPL', 'MSFT', 'KO', 'GOOGL', 'WMT', 'TSLA', 'AMZN', 'NVDA', 'JPM', 'V']
+        # Inicializar lista de tickers personalizados en sesión
+        if 'tickers_personalizados' not in st.session_state:
+            st.session_state.tickers_personalizados = []
+        
+        TICKERS_SUGERIDOS = ['AAPL', 'MSFT', 'KO', 'GOOGL', 'WMT', 'TSLA', 'AMZN', 'NVDA', 'JPM', 'V']
+        todos_los_tickers = list(set(TICKERS_SUGERIDOS + st.session_state.tickers_personalizados))
+        todos_los_tickers.sort()
+        
         tickers_seleccionados = st.multiselect(
             "Selecciona activos base (2-6)",
-            options=tickers_disponibles,
-            default=['AAPL', 'MSFT', 'KO', 'GOOGL']
+            options=todos_los_tickers,
+            default=['AAPL', 'MSFT', 'KO', 'GOOGL'] if len(todos_los_tickers) >= 4 else todos_los_tickers[:2],
+            help="Selecciona entre 2 y 6 empresas para diversificar"
         )
+        
+        st.divider()
+        
+        # Agregar ticker personalizado
+        st.markdown("**¿No encuentras tu ticker? Agrégalo aquí:**")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            ticker_nuevo = st.text_input(
+                "Ingresa el ticker (ej: META, DIS, NFLX, BA)",
+                placeholder="Ej: META",
+                help="El ticker debe existir en Yahoo Finance"
+            ).upper().strip()
+        
+        with col2:
+            st.write("")
+            st.write("")
+            if st.button("➕ Agregar Ticker", use_container_width=True):
+                if not ticker_nuevo:
+                    st.error("Ingresa un ticker válido")
+                elif ticker_nuevo in todos_los_tickers:
+                    st.warning(f"{ticker_nuevo} ya está en la lista")
+                else:
+                    with st.spinner(f"Verificando {ticker_nuevo}..."):
+                        try:
+                            stock_test = yf.Ticker(ticker_nuevo)
+                            info_test = stock_test.info
+                            if info_test.get('currentPrice') or info_test.get('regularMarketPrice'):
+                                st.session_state.tickers_personalizados.append(ticker_nuevo)
+                                st.success(f"✅ {ticker_nuevo} agregado correctamente")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {ticker_nuevo} no encontrado en Yahoo Finance")
+                        except Exception as e:
+                            st.error(f"❌ Error al verificar {ticker_nuevo}")
         
         st.divider()
         
@@ -1158,7 +1250,7 @@ with tab3:
             
             st.divider()
             
-            if st.button("⚙️ Ejecutar Optimización", type="primary"):
+            if st.button("️ Ejecutar Optimización", type="primary"):
                 with st.spinner("Obteniendo datos reales y optimizando..."):
                     opt_result = optimizar_portafolio(tickers_seleccionados, rf=rf/100)
                     
@@ -1265,7 +1357,7 @@ with tab3:
                     df['Peso_Optimo'] = opt['pesos'] * 100
                     df['Diferencia'] = df['Peso_Optimo'] - df['Peso_Actual']
                     df['Capital_Ajustar'] = df['Diferencia'] * capital_rebalanceo / 100
-                    df['Accion'] = df['Diferencia'].apply(lambda x: "🟢 COMPRAR" if x > 1 else "🔴 VENDER" if x < -1 else "✅ MANTENER")
+                    df['Accion'] = df['Diferencia'].apply(lambda x: "🟢 COMPRAR" if x > 1 else " VENDER" if x < -1 else "✅ MANTENER")
                     
                     st.dataframe(df, use_container_width=True, hide_index=True)
                     
