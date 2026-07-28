@@ -1130,7 +1130,7 @@ with tab3:
                 
                 st.divider()
                 
-                st.subheader(" ¿Qué significa esto?")
+                st.subheader("💡 ¿Qué significa esto?")
                 
                 if opt['sharpe'] > 1.0:
                     st.success(f"**Excelente portafolio!** Con un Ratio de Sharpe de {opt['sharpe']:.2f}, este portafolio ofrece muy buen retorno por cada unidad de riesgo asumido.")
@@ -1146,13 +1146,15 @@ with tab3:
                 if opt['volatilidad'] < 15:
                     st.markdown("**Conservador** 🟢\nEste portafolio está diseñado para proteger tu capital. Ideal si tu horizonte de inversión es corto (1-3 años).")
                 elif opt['volatilidad'] < 25:
-                    st.markdown("**Moderado** \nEste portafolio balancea crecimiento y estabilidad. Ideal si tu horizonte de inversión es mediano (3-7 años).")
+                    st.markdown("**Moderado** 🟡\nEste portafolio balancea crecimiento y estabilidad. Ideal si tu horizonte de inversión es mediano (3-7 años).")
                 else:
-                    st.markdown("**Agresivo** 🔴\nEste portafolio busca maximizar ganancias aceptando mayor volatilidad. Ideal si tu horizonte de inversión es largo (+7 años).")
+                    st.markdown("**Agresivo** \nEste portafolio busca maximizar ganancias aceptando mayor volatilidad. Ideal si tu horizonte de inversión es largo (+7 años).")
                 
-                # SECCIÓN DE REBALANCEO
+                # ==============================================================================
+                # SECCIÓN DE REBALANCEO - MODO SIMPLE
+                # ==============================================================================
                 st.divider()
-                st.subheader("🔄 ¿Ya tienes inversiones? Rebalancéalo hacia el óptimo")
+                st.subheader(" ¿Ya tienes inversiones? Rebalancéalo hacia el óptimo")
                 
                 st.markdown("""
                 Ingresa tu composición actual para saber cuánto comprar o vender de cada activo.
@@ -1193,14 +1195,14 @@ with tab3:
                 if modo_ingreso == "En porcentaje (%)":
                     total_ingresado = sum(pesos_actuales.values())
                     if abs(total_ingresado - 100.0) > 0.1:
-                        st.warning(f"⚠️ Los porcentajes deben sumar 100%. Actualmente suman {total_ingresado:.1f}%")
+                        st.warning(f"️ Los porcentajes deben sumar 100%. Actualmente suman {total_ingresado:.1f}%")
                         puede_rebalancear = False
                     else:
                         puede_rebalancear = True
                 else:
                     total_ingresado = sum(pesos_actuales.values())
                     if total_ingresado <= 0:
-                        st.warning("⚠️ El total invertido debe ser mayor a $0")
+                        st.warning("️ El total invertido debe ser mayor a $0")
                         puede_rebalancear = False
                     else:
                         puede_rebalancear = True
@@ -1232,7 +1234,7 @@ with tab3:
                     col1, col2 = st.columns(2)
                     with col1:
                         if not comprar.empty:
-                            st.success("** Comprar:**")
+                            st.success("**🟢 Comprar:**")
                             for _, row in comprar.iterrows():
                                 st.write(f"• {row['Activo']}: ${abs(row['Monto_Ajustar($)']):,.0f}")
                     with col2:
@@ -1265,7 +1267,9 @@ with tab3:
                             st.error(f"Error al generar PDF: {str(e)}")
     
     else:
+        # ==============================================================================
         # MODO AVANZADO
+        # ==============================================================================
         st.markdown("""
         ### Optimización de Portafolio - Modelo de Markowitz
         
@@ -1298,7 +1302,7 @@ with tab3:
         with col2:
             st.write("")
             st.write("")
-            if st.button("➕ Agregar Ticker", use_container_width=True):
+            if st.button(" Agregar Ticker", use_container_width=True):
                 if not ticker_nuevo:
                     st.error("Ingresa un ticker válido")
                 elif ticker_nuevo in todos_los_tickers:
@@ -1313,7 +1317,7 @@ with tab3:
                                 st.success(f"✅ {ticker_nuevo} agregado correctamente")
                                 st.rerun()
                             else:
-                                st.error(f" {ticker_nuevo} no encontrado en Yahoo Finance")
+                                st.error(f"❌ {ticker_nuevo} no encontrado en Yahoo Finance")
                         except Exception as e:
                             st.error(f"❌ Error al verificar {ticker_nuevo}")
         
@@ -1329,13 +1333,15 @@ with tab3:
                 rf = st.slider(
                     "Tasa Libre de Riesgo (%)", 
                     0.0, 10.0, 4.0, 0.5,
-                    help="Rendimiento de inversiones sin riesgo (bonos del Tesoro). Usualmente 3-5%. El portafolio debe superar esta tasa para justificar el riesgo."
+                    help="Rendimiento de inversiones sin riesgo (bonos del Tesoro). "
+                         "Usualmente 3-5%. El portafolio debe superar esta tasa para justificar el riesgo."
                 )
             with col2:
                 max_peso = st.slider(
                     "Peso Máximo por Activo (%)", 
                     10, 100, 40, 5,
-                    help="Porcentaje máximo que puede tener una sola empresa en el portafolio óptimo. Evita concentración excesiva. Valor típico: 30-50%."
+                    help="Porcentaje máximo que puede tener una sola empresa en el portafolio óptimo. "
+                         "Evita concentración excesiva. Valor típico: 30-50%."
                 )
             
             st.divider()
@@ -1427,7 +1433,9 @@ with tab3:
                     fig_corr.update_layout(height=400)
                     st.plotly_chart(fig_corr, use_container_width=True)
                 
+                # ==============================================================================
                 # SECCIÓN DE REBALANCEO - MODO AVANZADO
+                # ==============================================================================
                 st.divider()
                 st.subheader("7. Sistema de Rebalanceo Estratégico")
                 
@@ -1485,12 +1493,12 @@ with tab3:
                 else:
                     total_ingresado = sum(pesos_actuales.values())
                     if total_ingresado <= 0:
-                        st.warning("️ El total invertido debe ser mayor a $0")
+                        st.warning("⚠️ El total invertido debe ser mayor a $0")
                         puede_rebalancear = False
                     else:
                         puede_rebalancear = True
                 
-                if puede_rebalancear and st.button(" Calcular Rebalanceo"):
+                if puede_rebalancear and st.button("🔄 Calcular Rebalanceo"):
                     # Convertir a porcentajes si ingresó en dólares
                     if modo_ingreso == "En dólares ($)":
                         pesos_actuales_pct = {t: (v / total_ingresado) * 100 for t, v in pesos_actuales.items()}
