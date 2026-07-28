@@ -997,39 +997,46 @@ with tab2:
                     except Exception as e:
                         st.error(f"Error al generar PDF: {str(e)}")
 # ==============================================================================
-# PESTAÑA 3: PORTAFOLIO
+# PESTAÑA 3: PORTAFOLIO - VERSIÓN ROBUSTA
 # ==============================================================================
 with tab3:
-    st.header("💼 Optimizador de Portafolio")
+    st.header(" Optimizador de Portafolio")
     
-    # Inicializar tickers personalizados
+    # Inicializar variables de sesión
     if 'tickers_personalizados' not in st.session_state:
         st.session_state.tickers_personalizados = []
+    if 'etapa_actual' not in st.session_state:
+        st.session_state.etapa_actual = 1
+    if 'tickers_seleccionados' not in st.session_state:
+        st.session_state.tickers_seleccionados = []
+    if 'pesos_actuales' not in st.session_state:
+        st.session_state.pesos_actuales = {}
+    if 'capital_total' not in st.session_state:
+        st.session_state.capital_total = 100000.0
+    if 'resultado_evaluacion' not in st.session_state:
+        st.session_state.resultado_evaluacion = None
+    if 'resultado_optimizacion' not in st.session_state:
+        st.session_state.resultado_optimizacion = None
     
     TICKERS_SUGERIDOS = ['AAPL', 'MSFT', 'KO', 'GOOGL', 'WMT', 'TSLA', 'AMZN', 'NVDA', 'JPM', 'V']
     todos_los_tickers = list(set(TICKERS_SUGERIDOS + st.session_state.tickers_personalizados))
     todos_los_tickers.sort()
     
-    st.markdown("""
-    ###  Análisis y Optimización de Portafolio
-    
-    Ingresa tu portafolio **ACTUAL** para evaluar su eficiencia y obtener la optimización.
-    """)
-    
-    st.divider()
-    
     # ==============================================================================
-    # PASO 1: INGRESAR PORTFOLIO ACTUAL
+    # SELECCIÓN DE ACTIVOS (Siempre visible)
     # ==============================================================================
-    st.subheader("1. Tu Portafolio Actual")
+    st.subheader("1. Selección de Activos")
     
-    # Seleccionar tickers del portafolio actual
-    tickers_actuales = st.multiselect(
-        "Selecciona los activos de tu portafolio actual",
+    tickers_seleccionados = st.multiselect(
+        "Selecciona los activos de tu portafolio (2-6)",
         options=todos_los_tickers,
-        default=['AAPL', 'MSFT', 'KO'],
-        help="Selecciona entre 2 y 6 empresas que tengas actualmente"
+        default=st.session_state.tickers_seleccionados if st.session_state.tickers_seleccionados else ['AAPL', 'MSFT', 'KO'],
+        help="Selecciona entre 2 y 6 empresas",
+        key="select_tickers"
     )
+    
+    # Guardar selección
+    st.session_state.tickers_seleccionados = tickers_seleccionados
     
     st.divider()
     
@@ -1041,20 +1048,20 @@ with tab3:
             "Ingresa el ticker (ej: META, DIS, NFLX, BA)",
             placeholder="Ej: META",
             help="El ticker debe existir en Yahoo Finance",
-            key="agregar_ticker_portafolio"
+            key="input_ticker_nuevo"
         ).upper().strip()
     
     with col2:
         st.write("")
         st.write("")
-        if st.button("➕ Agregar Ticker", use_container_width=True, key="btn_agregar_ticker"):
+        if st.button(" Agregar Ticker", use_container_width=True, key="btn_agregar"):
             if ticker_nuevo and ticker_nuevo not in todos_los_tickers:
                 try:
                     stock_test = yf.Ticker(ticker_nuevo)
                     info_test = stock_test.info
                     if info_test.get('currentPrice') or info_test.get('regularMarketPrice'):
                         st.session_state.tickers_personalizados.append(ticker_nuevo)
-                        st.success(f"✅ {ticker_nuevo} agregado correctamente")
+                        st.success(f"✅ {ticker_nuevo} agregado")
                         st.rerun()
                     else:
                         st.error(f"❌ {ticker_nuevo} no encontrado")
@@ -1063,279 +1070,260 @@ with tab3:
     
     st.divider()
     
-    if len(tickers_actuales) < 2:
+    if len(tickers_seleccionados) < 2:
         st.warning("⚠️ Selecciona al menos 2 activos para continuar.")
     else:
-        # Ingresar composición actual
-        st.markdown("**Ingresa la composición de tu portafolio actual:**")
+        # ==============================================================================
+        # INGRESO DE COMPOSICIÓN ACTUAL
+        # ==============================================================================
+        st.subheader("2. Composición de tu Portafolio Actual")
         
         modo_ingreso = st.radio(
             "¿Cómo quieres ingresar la composición?",
             ["En porcentaje (%)", "En dólares ($)"],
             horizontal=True,
-            key="modo_ingreso_actual"
+            key="modo_ingreso"
         )
         
-        capital_total = 0.0
-        pesos_actuales_input = {}
-        
-        cols = st.columns(len(tickers_actuales))
-        for i, ticker in enumerate(tickers_actuales):
-            with cols[i]:
-                if modo_ingreso == "En porcentaje (%)":
+        if modo_ingreso == "En porcentaje (%)":
+            capital_total = st.number_input(
+                "Capital total del portafolio ($)",
+                min_value=1000.0,
+                value=st.session_state.capital_total,
+                step=1000.0,
+                key="capital_input"
+            )
+            st.session_state.capital_total = capital_total
+            
+            pesos_input = {}
+            cols = st.columns(len(tickers_seleccionados))
+            for i, ticker in enumerate(tickers_seleccionados):
+                with cols[i]:
                     peso = st.number_input(
                         f"{ticker} (%)",
                         min_value=0.0,
                         max_value=100.0,
-                        value=round(100.0/len(tickers_actuales), 1),
+                        value=round(100.0/len(tickers_seleccionados), 1),
                         step=0.1,
                         key=f"peso_{ticker}"
                     )
-                    pesos_actuales_input[ticker] = peso
-                else:
+                    pesos_input[ticker] = peso
+            
+            total_porcentaje = sum(pesos_input.values())
+            if abs(total_porcentaje - 100.0) > 0.1:
+                st.warning(f"⚠️ Los porcentajes suman {total_porcentaje:.1f}%. Deben sumar 100%.")
+                puede_evaluar = False
+            else:
+                puede_evaluar = True
+                montos_input = {t: (p/100) * capital_total for t, p in pesos_input.items()}
+        else:
+            montos_input = {}
+            cols = st.columns(len(tickers_seleccionados))
+            for i, ticker in enumerate(tickers_seleccionados):
+                with cols[i]:
                     monto = st.number_input(
                         f"{ticker} ($)",
                         min_value=0.0,
-                        value=10000.0/len(tickers_actuales),
+                        value=st.session_state.capital_total/len(tickers_seleccionados),
                         step=100.0,
                         key=f"monto_{ticker}"
                     )
-                    pesos_actuales_input[ticker] = monto
-        
-        # Validar y calcular totales
-        if modo_ingreso == "En porcentaje (%)":
-            total_porcentaje = sum(pesos_actuales_input.values())
-            capital_total = st.number_input(
-                "Capital total del portafolio ($)",
-                min_value=1000.0,
-                value=100000.0,
-                step=1000.0,
-                key="capital_total_input"
-            )
+                    montos_input[ticker] = monto
             
-            if abs(total_porcentaje - 100.0) > 0.1:
-                st.warning(f"⚠️ Los porcentajes suman {total_porcentaje:.1f}%. Deben sumar 100%.")
-                puede_continuar = False
-            else:
-                puede_continuar = True
-                # Convertir a montos
-                montos_actuales = {t: (p/100) * capital_total for t, p in pesos_actuales_input.items()}
-        else:
-            capital_total = sum(pesos_actuales_input.values())
-            montos_actuales = pesos_actuales_input
+            capital_total = sum(montos_input.values())
+            st.session_state.capital_total = capital_total
             
             if capital_total <= 0:
                 st.warning("⚠️ El capital total debe ser mayor a $0")
-                puede_continuar = False
+                puede_evaluar = False
             else:
-                puede_continuar = True
-                # Calcular porcentajes
-                pesos_actuales_input = {t: (v/capital_total)*100 for t, v in montos_actuales.items()}
+                puede_evaluar = True
+                pesos_input = {t: (v/capital_total)*100 for t, v in montos_input.items()}
         
         st.divider()
         
         # ==============================================================================
-        # PASO 2: EVALUAR PORTFOLIO ACTUAL
+        # EVALUACIÓN DEL PORTFOLIO ACTUAL
         # ==============================================================================
-        st.subheader("2. Evaluación de tu Portafolio Actual")
+        st.subheader("3. Evaluación del Portafolio Actual")
         
-        if puede_continuar and st.button("📊 Evaluar Portafolio Actual", type="primary"):
-            with st.spinner("Calculando métricas de tu portafolio..."):
-                # Obtener datos de los activos
+        if puede_evaluar and st.button(" Evaluar Portafolio Actual", type="primary", key="btn_evaluar"):
+            with st.spinner("Calculando métricas..."):
                 datos_activos = {}
-                for ticker in tickers_actuales:
+                for ticker in tickers_seleccionados:
                     datos = obtener_datos_financieros(ticker)
                     if datos:
                         datos_activos[ticker] = datos
                 
-                if len(datos_activos) < 2:
-                    st.error("No se pudieron obtener datos suficientes para los activos seleccionados.")
-                else:
-                    # Calcular métricas del portafolio actual
-                    pesos_array = np.array([pesos_actuales_input[t]/100 for t in tickers_actuales if t in datos_activos])
-                    retornos_array = np.array([datos_activos[t]['retorno_anual'] for t in tickers_actuales if t in datos_activos])
-                    vols_array = np.array([datos_activos[t]['volatilidad_anual'] for t in tickers_actuales if t in datos_activos])
+                if len(datos_activos) >= 2:
+                    tickers_validos = [t for t in tickers_seleccionados if t in datos_activos]
+                    pesos_array = np.array([pesos_input[t]/100 for t in tickers_validos])
+                    retornos_array = np.array([datos_activos[t]['retorno_anual'] for t in tickers_validos])
+                    vols_array = np.array([datos_activos[t]['volatilidad_anual'] for t in tickers_validos])
                     
-                    # Retorno del portafolio
                     retorno_portafolio = np.sum(pesos_array * retornos_array) * 100
                     
-                    # Volatilidad del portafolio (asumiendo correlación 0.3)
                     correlacion = 0.3
                     cov_matrix = np.outer(vols_array, vols_array) * correlacion
                     for i in range(len(vols_array)):
                         cov_matrix[i,i] = vols_array[i]**2
                     
                     volatilidad_portafolio = np.sqrt(np.dot(pesos_array.T, np.dot(cov_matrix, pesos_array))) * 100
-                    
-                    # Ratio de Sharpe
                     rf = 0.04
                     sharpe_portafolio = (retorno_portafolio/100 - rf) / (volatilidad_portafolio/100) if volatilidad_portafolio > 0 else 0
                     
-                    # Guardar en session state
-                    st.session_state.portfolio_actual = {
-                        'tickers': tickers_actuales,
-                        'pesos': pesos_actuales_input,
-                        'montos': montos_actuales if 'montos_actuales' in locals() else {},
+                    st.session_state.resultado_evaluacion = {
+                        'tickers': tickers_validos,
+                        'pesos': pesos_input,
+                        'montos': montos_input,
                         'capital': capital_total,
                         'retorno': retorno_portafolio,
                         'volatilidad': volatilidad_portafolio,
-                        'sharpe': sharpe_portafolio
+                        'sharpe': sharpe_portafolio,
+                        'datos_activos': datos_activos
                     }
                     
-                    # Mostrar resultados
-                    st.success("✅ Portafolio evaluado correctamente")
+                    st.success("✅ Evaluación completada")
+                    st.rerun()
+        
+        # Mostrar resultados de evaluación si existen
+        if st.session_state.resultado_evaluacion:
+            eval_result = st.session_state.resultado_evaluacion
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("📈 Retorno Anual", f"{eval_result['retorno']:.1f}%")
+            col2.metric("⚠️ Volatilidad", f"{eval_result['volatilidad']:.1f}%")
+            col3.metric("⭐ Ratio de Sharpe", f"{eval_result['sharpe']:.2f}")
+            
+            st.divider()
+            
+            df_actual = pd.DataFrame({
+                'Activo': eval_result['tickers'],
+                'Peso(%)': [round(eval_result['pesos'].get(t, 0), 1) for t in eval_result['tickers']],
+                'Monto($)': [round(eval_result['montos'].get(t, 0), 0) for t in eval_result['tickers']],
+                'Retorno(%)': [round(eval_result['datos_activos'][t]['retorno_anual']*100, 1) for t in eval_result['tickers']],
+                'Riesgo(%)': [round(eval_result['datos_activos'][t]['volatilidad_anual']*100, 1) for t in eval_result['tickers']]
+            })
+            
+            st.subheader("📋 Composición Actual")
+            st.dataframe(df_actual, use_container_width=True)
+            
+            st.divider()
+            
+            if eval_result['sharpe'] > 1.0:
+                st.success(f"**Excelente portafolio!** Sharpe de {eval_result['sharpe']:.2f}")
+            elif eval_result['sharpe'] > 0.5:
+                st.info(f"**Buen portafolio.** Sharpe de {eval_result['sharpe']:.2f}")
+            else:
+                st.warning(f"**Portafolio mejorable.** Sharpe de {eval_result['sharpe']:.2f}")
+            
+            st.divider()
+            
+            # ==============================================================================
+            # OPTIMIZACIÓN
+            # ==============================================================================
+            st.subheader("4. Optimización del Portafolio")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                rf_opt = st.slider(
+                    "Tasa Libre de Riesgo (%)",
+                    0.0, 10.0, 4.0, 0.5,
+                    help="Rendimiento de inversiones sin riesgo. Usualmente 3-5%.",
+                    key="rf_slider"
+                )
+            with col2:
+                max_peso = st.slider(
+                    "Peso Máximo por Activo (%)",
+                    10, 100, 40, 5,
+                    help="Porcentaje máximo por empresa. Evita concentración.",
+                    key="max_peso_slider"
+                )
+            
+            if st.button("⚙️ Calcular Portafolio Óptimo", type="primary", key="btn_optimizar"):
+                with st.spinner("Optimizando..."):
+                    opt_result = optimizar_portafolio(eval_result['tickers'], rf=rf_opt/100)
                     
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("📈 Retorno Anual", f"{retorno_portafolio:.1f}%")
-                    col2.metric("⚠️ Volatilidad", f"{volatilidad_portafolio:.1f}%")
-                    col3.metric("⭐ Ratio de Sharpe", f"{sharpe_portafolio:.2f}")
-                    
-                    st.divider()
-                    
-                    # Tabla de composición actual
-                    df_actual = pd.DataFrame({
-                        'Activo': tickers_actuales,
-                        'Peso(%)': [round(pesos_actuales_input[t], 1) for t in tickers_actuales],
-                        'Monto($)': [round(montos_actuales.get(t, 0), 0) for t in tickers_actuales],
-                        'Retorno(%)': [round(datos_activos[t]['retorno_anual']*100, 1) for t in tickers_actuales if t in datos_activos],
-                        'Riesgo(%)': [round(datos_activos[t]['volatilidad_anual']*100, 1) for t in tickers_actuales if t in datos_activos]
-                    })
-                    
-                    st.subheader(" Composición Actual")
-                    st.dataframe(df_actual, use_container_width=True)
-                    
-                    # Evaluación cualitativa
-                    st.divider()
-                    st.subheader("📊 Evaluación")
-                    
-                    if sharpe_portafolio > 1.0:
-                        st.success(f"**Excelente portafolio!** Sharpe de {sharpe_portafolio:.2f} indica muy buen retorno por unidad de riesgo.")
-                    elif sharpe_portafolio > 0.5:
-                        st.info(f"**Buen portafolio.** Sharpe de {sharpe_portafolio:.2f} indica balance aceptable.")
-                    else:
-                        st.warning(f"**Portafolio mejorable.** Sharpe de {sharpe_portafolio:.2f} sugiere que puede optimizarse.")
-                    
-                    st.divider()
-                    
-                    # ==============================================================================
-                    # PASO 3: OPTIMIZAR PORTFOLIO
-                    # ==============================================================================
-                    st.subheader("3. Optimización del Portafolio")
-                    
-                    st.markdown("Calcula la asignación **óptima** que maximiza el Ratio de Sharpe.")
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        rf_opt = st.slider(
-                            "Tasa Libre de Riesgo (%)",
-                            0.0, 10.0, 4.0, 0.5,
-                            help="Rendimiento de inversiones sin riesgo (bonos del Tesoro). Usualmente 3-5%."
-                        )
-                    with col2:
-                        max_peso = st.slider(
-                            "Peso Máximo por Activo (%)",
-                            10, 100, 40, 5,
-                            help="Porcentaje máximo por empresa. Evita concentración excesiva."
-                        )
-                    
-                    if st.button("⚙️ Calcular Portafolio Óptimo", type="primary"):
-                        with st.spinner("Optimizando portafolio..."):
-                            tickers_validos = [t for t in tickers_actuales if t in datos_activos]
-                            opt_result = optimizar_portafolio(tickers_validos, rf=rf_opt/100)
-                            
-                            if opt_result:
-                                # Aplicar restricción de peso máximo
-                                opt_result['pesos'] = np.minimum(opt_result['pesos'], max_peso/100)
-                                opt_result['pesos'] /= opt_result['pesos'].sum()
-                                
-                                # Recalcular métricas
-                                retornos = np.array([datos_activos[t]['retorno_anual'] for t in opt_result['tickers']])
-                                volatilidades = np.array([datos_activos[t]['volatilidad_anual'] for t in opt_result['tickers']])
-                                correlacion = np.eye(len(opt_result['tickers']))
-                                for i in range(len(opt_result['tickers'])):
-                                    for j in range(i+1, len(opt_result['tickers'])):
-                                        correlacion[i,j] = correlacion[j,i] = 0.3
-                                cov_matrix = np.outer(volatilidades, volatilidades) * correlacion
-                                
-                                opt_result['retorno'] = np.sum(retornos * opt_result['pesos']) * 100
-                                opt_result['volatilidad'] = np.sqrt(np.dot(opt_result['pesos'].T, np.dot(cov_matrix, opt_result['pesos']))) * 100
-                                opt_result['sharpe'] = (opt_result['retorno']/100 - rf_opt/100) / (opt_result['volatilidad']/100)
-                                
-                                st.session_state.opt_result = opt_result
-                                st.session_state.rf_opt = rf_opt
-                                st.session_state.max_peso = max_peso
-                                
-                                st.success("✅ Optimización completada")
-                                
-                                # Mostrar comparación
-                                col1, col2, col3 = st.columns(3)
-                                col1.metric("Retorno Óptimo", f"{opt_result['retorno']:.1f}%")
-                                col2.metric("Volatilidad Óptima", f"{opt_result['volatilidad']:.1f}%")
-                                col3.metric("Sharpe Óptimo", f"{opt_result['sharpe']:.2f}")
-                                
-                                st.divider()
-                                
-                                # ==============================================================================
-                                # PASO 4: REBALANCEO
-                                # ==============================================================================
-                                st.subheader("4. Plan de Rebalanceo")
-                                
-                                st.markdown("Compara tu portafolio **actual** vs **óptimo** y calcula los ajustes necesarios.")
-                                
-                                # Crear DataFrame de comparación
-                                df_rebalanceo = pd.DataFrame()
-                                df_rebalanceo['Activo'] = opt_result['tickers']
-                                df_rebalanceo['Actual(%)'] = [round(pesos_actuales_input.get(t, 0), 1) for t in opt_result['tickers']]
-                                df_rebalanceo['Óptimo(%)'] = (opt_result['pesos'] * 100).round(1)
-                                df_rebalanceo['Diferencia(%)'] = (df_rebalanceo['Óptimo(%)'] - df_rebalanceo['Actual(%)']).round(1)
-                                df_rebalanceo['Monto_Ajustar($)'] = (df_rebalanceo['Diferencia(%)'] * capital_total / 100).round(0)
-                                df_rebalanceo['Acción'] = df_rebalanceo['Diferencia(%)'].apply(
-                                    lambda x: "🟢 COMPRAR" if x > 1 else "🔴 VENDER" if x < -1 else " MANTENER"
-                                )
-                                
-                                st.dataframe(df_rebalanceo, use_container_width=True)
-                                
-                                # Resumen de acciones
-                                col1, col2, col3 = st.columns(3)
-                                
-                                comprar = df_rebalanceo[df_rebalanceo['Acción'].str.contains('COMPRAR')]
-                                vender = df_rebalanceo[df_rebalanceo['Acción'].str.contains('VENDER')]
-                                mantener = df_rebalanceo[df_rebalanceo['Acción'].str.contains('MANTENER')]
-                                
-                                with col1:
-                                    if not comprar.empty:
-                                        st.success("**🟢 Comprar:**")
-                                        for _, row in comprar.iterrows():
-                                            st.write(f"• {row['Activo']}: ${abs(row['Monto_Ajustar($)']):,.0f}")
-                                
-                                with col2:
-                                    if not vender.empty:
-                                        st.error("**🔴 Vender:**")
-                                        for _, row in vender.iterrows():
-                                            st.write(f"• {row['Activo']}: ${abs(row['Monto_Ajustar($)']):,.0f}")
-                                
-                                with col3:
-                                    if not mantener.empty:
-                                        st.info("**⚪ Mantener:**")
-                                        for _, row in mantener.iterrows():
-                                            st.write(f"• {row['Activo']}")
-                                
-                                # Métricas de mejora
-                                st.divider()
-                                st.subheader(" Mejora con la Optimización")
-                                
-                                mejora_retorno = opt_result['retorno'] - retorno_portafolio
-                                mejora_sharpe = opt_result['sharpe'] - sharpe_portafolio
-                                
-                                col1, col2 = st.columns(2)
-                                col1.metric("Mejora en Retorno", f"{mejora_retorno:+.1f}%")
-                                col2.metric("Mejora en Sharpe", f"{mejora_sharpe:+.2f}")
-                                
-                                if mejora_sharpe > 0:
-                                    st.success(f"✅ La optimización mejora el Ratio de Sharpe en {mejora_sharpe:.2f}")
-                                else:
-                                    st.info("ℹ️ Tu portafolio ya está bien diversificado")
-
+                    if opt_result:
+                        opt_result['pesos'] = np.minimum(opt_result['pesos'], max_peso/100)
+                        opt_result['pesos'] /= opt_result['pesos'].sum()
+                        
+                        retornos = np.array([eval_result['datos_activos'][t]['retorno_anual'] for t in opt_result['tickers']])
+                        volatilidades = np.array([eval_result['datos_activos'][t]['volatilidad_anual'] for t in opt_result['tickers']])
+                        correlacion = np.eye(len(opt_result['tickers']))
+                        for i in range(len(opt_result['tickers'])):
+                            for j in range(i+1, len(opt_result['tickers'])):
+                                correlacion[i,j] = correlacion[j,i] = 0.3
+                        cov_matrix = np.outer(volatilidades, volatilidades) * correlacion
+                        
+                        opt_result['retorno'] = np.sum(retornos * opt_result['pesos']) * 100
+                        opt_result['volatilidad'] = np.sqrt(np.dot(opt_result['pesos'].T, np.dot(cov_matrix, opt_result['pesos']))) * 100
+                        opt_result['sharpe'] = (opt_result['retorno']/100 - rf_opt/100) / (opt_result['volatilidad']/100)
+                        
+                        st.session_state.resultado_optimizacion = opt_result
+                        st.success("✅ Optimización completada")
+                        st.rerun()
+            
+            # Mostrar resultados de optimización si existen
+            if st.session_state.resultado_optimizacion:
+                opt = st.session_state.resultado_optimizacion
+                
+                st.divider()
+                st.subheader("5. Portafolio Óptimo")
+                
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Retorno Óptimo", f"{opt['retorno']:.1f}%")
+                col2.metric("Volatilidad Óptima", f"{opt['volatilidad']:.1f}%")
+                col3.metric("Sharpe Óptimo", f"{opt['sharpe']:.2f}")
+                
+                st.divider()
+                
+                # ==============================================================================
+                # REBALANCEO
+                # ==============================================================================
+                st.subheader("6. Plan de Rebalanceo")
+                
+                df_rebalanceo = pd.DataFrame()
+                df_rebalanceo['Activo'] = opt['tickers']
+                df_rebalanceo['Actual(%)'] = [round(eval_result['pesos'].get(t, 0), 1) for t in opt['tickers']]
+                df_rebalanceo['Óptimo(%)'] = (opt['pesos'] * 100).round(1)
+                df_rebalanceo['Diferencia(%)'] = (df_rebalanceo['Óptimo(%)'] - df_rebalanceo['Actual(%)']).round(1)
+                df_rebalanceo['Monto_Ajustar($)'] = (df_rebalanceo['Diferencia(%)'] * capital_total / 100).round(0)
+                df_rebalanceo['Acción'] = df_rebalanceo['Diferencia(%)'].apply(
+                    lambda x: "🟢 COMPRAR" if x > 1 else "🔴 VENDER" if x < -1 else "⚪ MANTENER"
+                )
+                
+                st.dataframe(df_rebalanceo, use_container_width=True)
+                
+                col1, col2, col3 = st.columns(3)
+                
+                comprar = df_rebalanceo[df_rebalanceo['Acción'].str.contains('COMPRAR')]
+                vender = df_rebalanceo[df_rebalanceo['Acción'].str.contains('VENDER')]
+                mantener = df_rebalanceo[df_rebalanceo['Acción'].str.contains('MANTENER')]
+                
+                with col1:
+                    if not comprar.empty:
+                        st.success("**🟢 Comprar:**")
+                        for _, row in comprar.iterrows():
+                            st.write(f"• {row['Activo']}: ${abs(row['Monto_Ajustar($)']):,.0f}")
+                
+                with col2:
+                    if not vender.empty:
+                        st.error("**🔴 Vender:**")
+                        for _, row in vender.iterrows():
+                            st.write(f"• {row['Activo']}: ${abs(row['Monto_Ajustar($)']):,.0f}")
+                
+                with col3:
+                    if not mantener.empty:
+                        st.info("**⚪ Mantener:**")
+                        for _, row in mantener.iterrows():
+                            st.write(f"• {row['Activo']}")
+                
+                st.divider()
+                
+                mejora_sharpe = opt['sharpe'] - eval_result['sharpe']
+                if mejora_sharpe > 0:
+                    st.success(f"✅ La optimización mejora el Sharpe en {mejora_sharpe:.2f}")
 # ==============================================================================
 # PESTAÑA 4: PRONÓSTICO Y RIESGOS
 # ==============================================================================
