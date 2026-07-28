@@ -651,6 +651,73 @@ def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> s
     pdf.output(temp_path)
     return temp_path
     # ==============================================================================
+# PASO 9A: MOTOR DE NARRATIVA BUFFETT (Basado en Reglas)
+# ==============================================================================
+def generar_narrativa_buffett(datos: dict) -> str:
+    """
+    Genera un análisis narrativo basado en la filosofía de Warren Buffett.
+    Utiliza las métricas reales calculadas por el sistema.
+    """
+    if not datos:
+        return "No hay datos suficientes para generar el análisis."
+    
+    roic = datos.get('roic', 0)
+    deuda = datos.get('deuda_ebitda', 2.0)
+    pe = datos.get('pe_ratio', 0)
+    margen = datos.get('margen_seguridad', 0)
+    sector = datos.get('sector', 'General')
+    
+    narrativa = []
+    
+    # 1. EL FOSO ECONÓMICO (ROIC)
+    narrativa.append("### 🏰 1. El Foso Económico (Ventaja Competitiva)")
+    if roic > 20:
+        narrativa.append(f"Con un **ROIC del {roic:.1f}%**, esta empresa demuestra tener un 'foso económico' extraordinariamente amplio. Como siempre digo: *'Busco negocios con una ventaja competitiva durable que proteja sus retornos sobre el capital invertido'.* Una gestión que asigna el capital de esta manera es un tesoro raro.")
+    elif roic > 12:
+        narrativa.append(f"Un **ROIC del {roic:.1f}%** indica un negocio sólido y rentable. *'Prefiero una empresa maravillosa a un precio justo'*, y este retorno sugiere que la empresa tiene buena salud operativa.")
+    else:
+        narrativa.append(f"Un **ROIC del {roic:.1f}%** es preocupante. *'El tiempo es amigo de los negocios maravillosos y enemigo de los mediocres'*. Si el retorno sobre el capital no supera fácilmente el costo de ese capital, el negocio tiene los días contados.")
+    
+    narrativa.append("") # Espacio
+    
+    # 2. SALUD FINANCIERA (DEUDA)
+    narrativa.append("###  2. Salud Financiera y Riesgo")
+    if deuda < 1.5:
+        narrativa.append(f"Su ratio **Deuda/EBITDA de {deuda:.2f}x** es envidiable. *'La regla número 1 es no perder dinero. La regla número 2 es no olvidar la regla número 1'*. Una empresa con poca deuda puede sobrevivir a cualquier tormenta económica.")
+    elif deuda < 3.0:
+        narrativa.append(f"Con una **Deuda/EBITDA de {deuda:.2f}x**, la empresa maneja un nivel de apalancamiento aceptable, aunque no es lo ideal. *'Solo cuando baja la marea se ve quién está nadando desnudo'*. Hay que vigilar que los tipos de interés no suban demasiado.")
+    else:
+        narrativa.append(f"¡Cuidado! Una **Deuda/EBITDA de {deuda:.2f}x** es muy alta. *'El apalancamiento es como la gasolina en un coche: te hace ir más rápido, pero si te chocas, la explosión es mucho mayor'*. Evitaría esta empresa hasta que limpien su balance.")
+    
+    narrativa.append("") # Espacio
+    
+    # 3. VALORACIÓN (P/E Y MARGEN DE SEGURIDAD)
+    narrativa.append("### 🏷️ 3. Valoración y el 'Mr. Market'")
+    if margen > 20:
+        narrativa.append(f"Con un **Margen de Seguridad del {margen:.1f}%** y un P/E de {pe:.1f}x, el mercado está siendo irracionalmente pesimista. *'El mercado de valores es un mecanismo para transferir dinero del impaciente al paciente'*. Esta es una clara oportunidad de compra.")
+    elif margen > 0:
+        narrativa.append(f"El **Margen de Seguridad es del {margen:.1f}%** (P/E: {pe:.1f}x). Es un precio razonable, pero no una ganga. *'Es mejor comprar una empresa maravillosa a un precio justo, que una empresa justa a un precio maravilloso'*. Se puede considerar una entrada parcial.")
+    else:
+        narrativa.append(f"Con un **Margen de Seguridad del {margen:.1f}%** (P/E: {pe:.1f}x), el precio actual está inflado por el entusiasmo del mercado. *'El precio es lo que pagas, el valor es lo que obtienes'*. A este precio, el riesgo de perder dinero permanente es alto. Paciencia, joven inversor.")
+    
+    narrativa.append("") # Espacio
+    
+    # 4. VEREDICTO FINAL
+    narrativa.append("### 🎯 Veredicto Final del Oráculo de Omaha")
+    score = 0
+    if roic > 15: score += 1
+    if deuda < 2.0: score += 1
+    if margen > 0: score += 1
+    
+    if score == 3:
+        narrativa.append("**✅ COMPRA POTENCIAL:** Una empresa maravillosa a un precio justo. Cumple con todos los criterios de mi filosofía de inversión. Si tienes convicción, es hora de actuar.")
+    elif score == 2:
+        narrativa.append("**⏳ MANTENER EN WATCHLIST:** Tienes un buen negocio, pero el precio no acompaña (o viceversa). Agrega esta empresa a tu lista de seguimiento y espera a que 'Mr. Market' te ofrezca un mejor precio.")
+    else:
+        narrativa.append("**❌ DESCARTAR POR AHORA:** O el negocio no es lo suficientemente bueno, o el precio es demasiado alto. En las inversiones, no te pagan por la actividad, te pagan por esperar el momento correcto.")
+        
+    return "\n".join(narrativa)
+    # ==============================================================================
 # INTERFAZ DE USUARIO
 # ==============================================================================
 st.title(" QuantBuffett AI")
@@ -975,7 +1042,20 @@ with tab2:
                 st.write(datos['descripcion'])
             
             st.divider()
+                        # ==============================================================================
+            # PASO 9B: NARRATIVA BUFFETT EN LA UI
+            # ==============================================================================
+            st.divider()
+            st.subheader(" El Veredicto de Buffett")
+            st.markdown("*Análisis basado en la filosofía de Inversión de Valor*")
             
+            with st.expander("📖 Leer análisis completo de Warren Buffett", expanded=True):
+                narrativa = generar_narrativa_buffett(datos)
+                st.markdown(narrativa)
+                
+                st.caption("⚠️ Nota: Este análisis es generado por un motor de reglas basado en principios históricos de Warren Buffett. No constituye asesoramiento financiero personalizado.")
+            
+            st.divider()
             if st.button("📥 Descargar PDF del Análisis"):
                 with st.spinner("Generando PDF..."):
                     try:
