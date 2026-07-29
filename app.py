@@ -110,24 +110,21 @@ def calcular_market_cap_real(stock, price):
         return None
 
 def calcular_dividend_yield_real(stock, price):
-    """Calcula Dividend Yield corrigiendo formato de Yahoo Finance."""
+    """Calcula Dividend Yield corrigiendo la interpretación decimal de Yahoo Finance."""
     try:
         div_yield = stock.info.get('dividendYield', 0) or 0
         
-        # Yahoo Finance devuelve dividendYield en diferentes formatos:
-        # - 0.32 significa 0.32% (ya es porcentaje)
-        # - 0.0032 significa 0.32% (es decimal, multiplicar por 100)
-        
+        # Yahoo Finance lo devuelve como decimal (ej: 0.015 = 1.5%)
         if 0 < div_yield < 1:
-            # Ya es porcentaje (ej: 0.32 = 0.32%)
-            return div_yield
-        elif 0 < div_yield < 0.01:
-            # Es decimal (ej: 0.0032 = 0.32%)
-            return div_yield * 100
+            return div_yield * 100  # Convertir a porcentaje real
+        elif 1 <= div_yield <= 20:
+            return div_yield  # Ya viene como porcentaje en algunos casos raros
         
         return 0.0
-    except:
+    except Exception as e:
+        print(f"Error en dividend yield: {e}")
         return 0.0
+
 
 def calcular_retorno_anual_real(stock):
     """Calcula retorno anual real de 1 año. Devuelve None si los datos son insuficientes o inválidos."""
