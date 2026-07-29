@@ -705,11 +705,11 @@ def generar_narrativa_buffett(datos: dict) -> str:
     if margen > 0: score += 1
     
     if score == 3:
-        narrativa.append("**✅ COMPRA POTENCIAL:** Una empresa maravillosa a un precio justo. Cumple con todos los criterios de mi filosofía de inversión. Si tienes convicción, es hora de actuar.")
+        narrativa.append("**🟢 SEÑAL CUANTITATIVA POSITIVA:** Una empresa maravillosa a un precio justo. Cumple con todos los criterios de mi filosofía de inversión. Si tienes convicción, es hora de actuar.")
     elif score == 2:
-        narrativa.append("**⏳ MANTENER EN WATCHLIST:** Tienes un buen negocio, pero el precio no acompaña (o viceversa). Agrega esta empresa a tu lista de seguimiento y espera a que 'Mr. Market' te ofrezca un mejor precio.")
+        narrativa.append("**🟡 SEÑAL NEUTRA / EN OBSERVACIÓN:** Tienes un buen negocio, pero el precio no acompaña (o viceversa). Agrega esta empresa a tu lista de seguimiento y espera a que 'Mr. Market' te ofrezca un mejor precio.")
     else:
-        narrativa.append("**❌ DESCARTAR POR AHORA:** O el negocio no es lo suficientemente bueno, o el precio es demasiado alto. En las inversiones, no te pagan por la actividad, te pagan por esperar el momento correcto.")
+        narrativa.append("**🔴 SEÑAL CUANTITATIVA NEGATIVA:** O el negocio no es lo suficientemente bueno, o el precio es demasiado alto. En las inversiones, no te pagan por la actividad, te pagan por esperar el momento correcto.")
         
     return "\n".join(narrativa)
     # ==============================================================================
