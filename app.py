@@ -31,67 +31,52 @@ if 'watchlist' not in st.session_state:
 # FUNCIONES DE CÁLCULO CON ESTADOS FINANCIEROS CRUDOS
 # ==============================================================================
 
-def calcular_roic_desde_estados(stock):
-    """Calcula ROIC real usando Income Statement y Balance Sheet."""
+def calcular_metricas_ttm(stock):
+    """
+    Calcula ROIC y Deuda/EBITDA usando datos TTM (Trailing Twelve Months).
+    Suma los últimos 4 trimestres y calcula la tasa impositiva efectiva real.
+    """
     try:
         income = stock.income_stmt
         balance = stock.balance_sheet
         
-        if income.empty or balance.empty:
-            return None
+        if income.empty or balance.empty or len(income.columns) < 1:
+            return None, None
         
-        # NOPAT = EBIT × (1 - tasa_impositiva)
-        ebit = income.loc['EBIT'].iloc[0] if 'EBIT' in income.index else None
-        if ebit is None:
-            return None
+        # Tomar los últimos 4 trimestres disponibles (o menos si la empresa es nueva)
+        num_periods = min(4, len(income.columns))
+        income_ttm = income.iloc[:, :num_periods]
         
-        tax_rate = 0.21  # Tasa corporativa estándar
-        nopat = ebit * (1 - tax_rate)
+        # 1. Calcular EBIT y Tasa Impositiva Efectiva TTM
+        ebit_ttm = income_ttm.loc['EBIT'].sum() if 'EBIT' in income_ttm.index else 0
+        tax_prov = income_ttm.loc['Tax Provision'].sum() if 'Tax Provision' in income_ttm.index else 0
+        pretax_income = income_ttm.loc['Pretax Income'].sum() if 'Pretax Income' in income_ttm.index else 0
         
-        # Capital Invertido = Patrimonio + Deuda Total - Efectivo
-        equity = balance.loc['Stockholders Equity'].iloc[0] if 'Stockholders Equity' in balance.index else 0
-        debt = balance.loc['Total Debt'].iloc[0] if 'Total Debt' in balance.index else 0
-        cash = balance.loc['Cash And Cash Equivalents'].iloc[0] if 'Cash And Cash Equivalents' in balance.index else 0
+        # Tasa efectiva: si el ingreso antes de impuestos es 0 o negativo, usamos 21% como fallback conservador
+        tax_rate = (tax_prov / pretax_income) if pretax_income > 0 else 0.21
+        tax_rate = max(0.0, min(0.40, tax_rate)) # Limitar a un rango razonable (0% - 40%)
         
-        capital_invertido = equity + debt - cash
+        nopat = ebit_ttm * (1 - tax_rate)
         
-        if capital_invertido <= 0:
-            return None
+        # 2. Calcular Capital Invertido (usando el balance más reciente)
+        latest_balance = balance.iloc[:, 0]
+        equity = latest_balance.get('Stockholders Equity', 0) or 0
+        total_debt = latest_balance.get('Total Debt', 0) or 0
+        cash = latest_balance.get('Cash And Cash Equivalents', 0) or 0
         
-        roic = (nopat / capital_invertido) * 100
+        capital_invertido = equity + total_debt - cash
         
-        # Validar: ROIC debe estar entre 0% y 100%
-        if roic < 0 or roic > 100:
-            return None
+        roic = (nopat / capital_invertido * 100) if capital_invertido > 0 else None
         
-        return roic
-    except:
-        return None
-
-def calcular_deuda_ebitda_desde_estados(stock):
-    """Calcula Deuda/EBITDA real usando Balance Sheet e Income Statement."""
-    try:
-        balance = stock.balance_sheet
-        income = stock.income_stmt
+        # 3. Calcular Deuda / EBITDA TTM
+        ebitda_ttm = income_ttm.loc['EBITDA'].sum() if 'EBITDA' in income_ttm.index else 0
+        deuda_ebitda = (total_debt / ebitda_ttm) if ebitda_ttm > 0 else None
         
-        if balance.empty or income.empty:
-            return None
+        return roic, deuda_ebitda
         
-        debt = balance.loc['Total Debt'].iloc[0] if 'Total Debt' in balance.index else 0
-        ebitda = income.loc['EBITDA'].iloc[0] if 'EBITDA' in income.index else None
-        
-        if ebitda is None or ebitda <= 0:
-            return None
-        
-        ratio = debt / ebitda
-        
-        # Validar: debe estar entre 0 y 15
-        if ratio < 0 or ratio > 15:
-            return None
-        
-        return ratio
-    except:
-        return None
+    except Exception as e:
+        print(f"Error en cálculo TTM: {e}")
+        return None, None
 
 def calcular_market_cap_real(stock, price):
     """Calcula Market Cap real. Sin hacks de división."""
