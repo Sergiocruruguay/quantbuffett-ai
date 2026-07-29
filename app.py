@@ -246,12 +246,14 @@ def analizar_riesgos_ia(ticker: str) -> dict:
             'recomendacion': 'No se pudieron obtener datos para analizar riesgos.'
         }
     
-        riesgos = []
+    # CORRECCIÓN DEFINITIVA: Inicialización segura al nivel correcto de indentación
+    riesgos = []
     
-    # 1. Riesgo Financiero (Manejo seguro de None)
+    # 1. Riesgo Financiero
     deuda_ebitda = datos.get('deuda_ebitda')
-    if deuda_ebitda is None: deuda_ebitda = 2.0 # Fallback seguro para visualización
-    
+    if deuda_ebitda is None: 
+        deuda_ebitda = 2.0 
+        
     if deuda_ebitda > 3.0: severidad, nivel = 90, "Crítico"
     elif deuda_ebitda > 2.0: severidad, nivel = 70, "Alto"
     elif deuda_ebitda > 1.0: severidad, nivel = 50, "Moderado"
@@ -264,10 +266,11 @@ def analizar_riesgos_ia(ticker: str) -> dict:
         'mitigacion': 'Mantener política de deuda conservadora' if deuda_ebitda <= 2 else 'Reducir deuda'
     })
     
-    # 2. Riesgo Operativo (ROIC) (Manejo seguro de None)
+    # 2. Riesgo Operativo (ROIC)
     roic = datos.get('roic')
-    if roic is None: roic = 15.0 # Fallback seguro
-    
+    if roic is None: 
+        roic = 15.0 
+        
     if roic < 10: severidad, nivel = 85, "Crítico"
     elif roic < 15: severidad, nivel = 60, "Alto"
     elif roic < 25: severidad, nivel = 40, "Moderado"
@@ -280,14 +283,22 @@ def analizar_riesgos_ia(ticker: str) -> dict:
         'mitigacion': 'Continuar con estrategia rentable' if roic >= 15 else 'Optimizar asignación de capital'
     })
     
-    # 3. Riesgo de Mercado (Margen de Seguridad) (Manejo seguro de None)
+    # 3. Riesgo de Mercado (Margen de Seguridad)
     margen = datos.get('margen_seguridad')
-    if margen is None: margen = 0.0
-    
+    if margen is None: 
+        margen = 0.0
+        
     if margen < -20: severidad, nivel = 80, "Crítico"
     elif margen < 0: severidad, nivel = 60, "Alto"
     elif margen < 15: severidad, nivel = 40, "Moderado"
     else: severidad, nivel = 20, "Bajo"
+    
+    riesgos.append({
+        'categoria': 'Mercado',
+        'descripcion': f"Margen de seguridad del {margen:.1f}%",
+        'severidad': severidad, 'nivel': nivel,
+        'mitigacion': 'Precio ofrece protección' if margen >= 0 else 'Esperar corrección'
+    })
     
     # 4. Riesgo Sistemático (Beta)
     beta = datos.get('beta', 1.0)
@@ -334,9 +345,11 @@ def analizar_riesgos_ia(ticker: str) -> dict:
     else: perfil, rec = "Alto Riesgo - Agresivo", "Solo perfiles agresivos."
     
     return {
-        'ticker': ticker, 'riesgos': riesgos,
+        'ticker': ticker, 
+        'riesgos': riesgos,
         'score_riesgo': round(score_riesgo, 1),
-        'perfil_riesgo': perfil, 'recomendacion': rec
+        'perfil_riesgo': perfil, 
+        'recomendacion': rec
     }
 
 # ==============================================================================
@@ -1026,19 +1039,35 @@ with tab2:
             else:
                 st.info("### 🔴 SEÑAL CUANTITATIVA NEGATIVA\n**Fundamentales débiles o precio elevado:**\n- Revisar tendencias históricas y riesgos.")
             
-            st.divider()
+                        st.divider()
             if st.button("📥 Descargar PDF del Análisis"):
-                with st.spinner("Generando PDF..."):
+                with st.spinner("Generando reporte PDF..."):
                     try:
-                        pronostico = pronosticar_precio(ticker_input, 90)
-                        riesgos = analizar_riesgos_ia(ticker_input)
-                        if pronostico and riesgos:
-                            pdf_path = generar_pdf_activo(ticker_input, datos, pronostico, riesgos)
+                        # 1. Obtener cada componente de forma independiente y segura
+                        datos_pdf = st.session_state.datos_activo
+                        pronostico_pdf = pronosticar_precio(ticker_input, 90)
+                        riesgos_pdf = analizar_riesgos_ia(ticker_input)
+                        
+                        # 2. Validación estricta: si alguno es None o vacío, detenemos el proceso
+                        if not datos_pdf or not pronostico_pdf or not riesgos_pdf:
+                            st.error("❌ No se pudieron obtener todos los datos necesarios para generar el reporte.")
+                        else:
+                            # 3. Generar PDF solo si las 3 variables son válidas
+                            pdf_path = generar_pdf_activo(ticker_input, datos_pdf, pronostico_pdf, riesgos_pdf)
+                            
                             with open(pdf_path, 'rb') as f:
-                                st.download_button(label="⬇️ Descargar PDF", data=f.read(), file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", type="primary")
+                                st.download_button(
+                                    label="⬇️ Descargar PDF",
+                                    data=f.read(),
+                                    file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                    mime="application/pdf",
+                                    type="primary"
+                                )
                             st.success("✅ PDF generado correctamente")
+                            
                     except Exception as e:
-                        st.error(f"Error al generar PDF: {str(e)}")
+                        # Manejo de errores genérico que nunca fallará
+                        st.error(f"❌ Error crítico al generar el PDF: {str(e)}")
         
         else: # Modo Avanzado
             col1, col2, col3, col4 = st.columns(4)
