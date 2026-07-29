@@ -94,20 +94,18 @@ def calcular_deuda_ebitda_desde_estados(stock):
         return None
 
 def calcular_market_cap_real(stock, price):
-    """Calcula Market Cap con corrección para datos de Yahoo Finance."""
+    """Calcula Market Cap real. Sin hacks de división."""
     try:
-        market_cap_yahoo = stock.info.get('marketCap', 0) or 0
+        shares = stock.info.get('sharesOutstanding', 0) or 0
+        if shares > 0 and price > 0:
+            return price * shares
         
-        if market_cap_yahoo > 0:
-            # Yahoo Finance reporta market cap inflado para algunas empresas
-            # AAPL: reporta ~$4.95T pero debería ser ~$3.3T
-            if market_cap_yahoo > 4e12:  # > $4T
-                return market_cap_yahoo / 1.5
-            return market_cap_yahoo
-        
-        return None
-    except:
-        return None
+        # Fallback directo de Yahoo, sin alteraciones
+        return stock.info.get('marketCap', 0) or 0
+    except Exception as e:
+        print(f"Error en Market Cap: {e}")
+        return 0
+
 
 def calcular_dividend_yield_real(stock, price):
     """Calcula Dividend Yield corrigiendo la interpretación decimal de Yahoo Finance."""
