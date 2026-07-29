@@ -988,7 +988,7 @@ with tab2:
             else:
                 st.warning("Ya está en la Watchlist")
     
-        if st.button("🔍 Analizar", type="primary"):
+    if st.button("🔍 Analizar", type="primary"):
         with st.spinner("Calculando ratios desde estados financieros crudos..."):
             datos = obtener_datos_financieros(ticker_input)
             if datos:
@@ -998,7 +998,6 @@ with tab2:
                 st.session_state.datos_activo = None
                 st.session_state.error_activo = f"No se pudieron obtener datos para {ticker_input}. Verifica el ticker."
     
-    # CORRECCIÓN DE INDENTACIÓN: Este bloque debe estar al mismo nivel que el "if st.button"
     if st.session_state.get('error_activo'):
         st.error(st.session_state.error_activo)
     elif 'datos_activo' in st.session_state and st.session_state.datos_activo:
@@ -1084,119 +1083,12 @@ with tab2:
                             st.success("✅ PDF generado correctamente")
                     except Exception as e:
                         st.error(f"Error al generar PDF: {str(e)}")
-    
-        if st.session_state.get('error_activo'):
-        st.error(st.session_state.error_activo)
-    elif 'datos_activo' in st.session_state and st.session_state.datos_activo:
-        datos = st.session_state.datos_activo
-        
-        st.success(f"✅ Datos calculados manualmente de {datos.get('fuente', 'Yahoo Finance')}")
-        
-        if modo_usuario == "🟢 Simple (Principiantes)":
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("💰 Precio", f"${datos['precio']:.2f}")
-            col2.metric("📈 P/E", f"{datos.get('pe_ratio', 0):.1f}x")
-            
-            # Manejo seguro de valores None
-            roic_str = f"{datos['roic']:.1f}%" if datos.get('roic') is not None else "N/A"
-            col3.metric("📊 ROIC", roic_str)
-            col4.metric("🎯 Beta", f"{datos.get('beta', 1):.2f}")
-            
-            st.divider()
-            
-            roic = datos.get('roic', 0) or 0
-            deuda = datos.get('deuda_ebitda', 99) or 99
-            
-            # LENGUAJE DE COMPLIANCE (Sin promesas de compra)
-            if roic > 15 and deuda < 2:
-                st.success("""
-                ### 🟢 SEÑAL CUANTITATIVA POSITIVA
-                **Fundamentales sólidos:**
-                - ✅ ROIC atractivo (>15%)
-                - ✅ Deuda controlada (<2x EBITDA)
-                *Nota: Esto no constituye una recomendación de compra.*
-                """)
-            elif roic > 10:
-                st.warning("""
-                ### 🟡 SEÑAL NEUTRA / EN OBSERVACIÓN
-                **Requiere análisis adicional:**
-                - ⚠️ Revisar nivel de deuda y valoración actual.
-                """)
-            else:
-                st.info("""
-                ### 🔴 SEÑAL CUANTITATIVA NEGATIVA
-                **Fundamentales débiles o precio elevado:**
-                - Revisar tendencias históricas y riesgos.
-                """)
-            
-            st.divider()
-            if st.button("📥 Descargar PDF del Análisis"):
-                with st.spinner("Generando PDF..."):
-                    try:
-                        pronostico = pronosticar_precio(ticker_input, 90)
-                        riesgos = analizar_riesgos_ia(ticker_input)
-                        if pronostico and riesgos:
-                            pdf_path = generar_pdf_activo(ticker_input, datos, pronostico, riesgos)
-                            with open(pdf_path, 'rb') as f:
-                                st.download_button(label="⬇️ Descargar PDF", data=f.read(), file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", type="primary")
-                            st.success("✅ PDF generado correctamente")
-                    except Exception as e:
-                        st.error(f"Error al generar PDF: {str(e)}")
-        
-        else: # Modo Avanzado
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("💰 Precio", f"${datos['precio']:.2f}")
-            col2.metric("📈 P/E", f"{datos.get('pe_ratio', 0):.1f}x")
-            col3.metric("📊 ROIC", f"{datos.get('roic', 0):.1f}%" if datos.get('roic') else "N/A")
-            col4.metric("🎯 Beta", f"{datos.get('beta', 1):.2f}")
-            
-            st.divider()
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("💵 EPS", f"${datos.get('eps', 0):.2f}")
-                st.metric("🏢 Sector", datos.get('sector', 'N/A'))
-            with col2:
-                st.metric("💼 Market Cap", f"${datos.get('market_cap', 0)/1e9:.1f}B")
-                st.metric("🏭 Industria", datos.get('industry', 'N/A'))
-            
-            if datos.get('descripcion'):
-                st.divider()
-                st.subheader("📝 Descripción de la Empresa")
-                st.write(datos['descripcion'])
-            
-            st.divider()
-            
-            # ==============================================================================
-            # PASO 9B: NARRATIVA BUFFETT EN LA UI (INDENTACIÓN CORREGIDA)
-            # ==============================================================================
-            st.subheader("🧠 El Veredicto de Buffett")
-            st.markdown("*Análisis basado en la filosofía de Inversión de Valor*")
-            
-            with st.expander("📖 Leer análisis completo", expanded=True):
-                narrativa = generar_narrativa_buffett(datos)
-                st.markdown(narrativa)
-                st.caption("⚠️ Nota: Análisis generado por motor de reglas basado en principios históricos. No es asesoramiento financiero.")
-            
-            st.divider()
-            if st.button("📥 Descargar PDF del Análisis"):
-                with st.spinner("Generando PDF..."):
-                    try:
-                        pronostico = pronosticar_precio(ticker_input, 90)
-                        riesgos = analizar_riesgos_ia(ticker_input)
-                        if pronostico and riesgos:
-                            pdf_path = generar_pdf_activo(ticker_input, datos, pronostico, riesgos)
-                            with open(pdf_path, 'rb') as f:
-                                st.download_button(label="⬇️ Descargar PDF", data=f.read(), file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", type="primary")
-                            st.success("✅ PDF generado correctamente")
-                    except Exception as e:
-                        st.error(f"Error al generar PDF: {str(e)}")
 # ==============================================================================
 # PESTAÑA 3: PORTAFOLIO - VERSIÓN ROBUSTA
 # ==============================================================================
 with tab3:
-    st.header(" Optimizador de Portafolio")
+    st.header("💼 Optimizador de Portafolio")
     
-    # Inicializar variables de sesión
     if 'tickers_personalizados' not in st.session_state:
         st.session_state.tickers_personalizados = []
     if 'etapa_actual' not in st.session_state:
@@ -1216,9 +1108,6 @@ with tab3:
     todos_los_tickers = list(set(TICKERS_SUGERIDOS + st.session_state.tickers_personalizados))
     todos_los_tickers.sort()
     
-    # ==============================================================================
-    # SELECCIÓN DE ACTIVOS (Siempre visible)
-    # ==============================================================================
     st.subheader("1. Selección de Activos")
     
     tickers_seleccionados = st.multiselect(
@@ -1229,12 +1118,9 @@ with tab3:
         key="select_tickers"
     )
     
-    # Guardar selección
     st.session_state.tickers_seleccionados = tickers_seleccionados
-    
     st.divider()
     
-    # Agregar ticker personalizado
     st.markdown("**¿No encuentras tu ticker? Agrégalo aquí:**")
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -1248,7 +1134,7 @@ with tab3:
     with col2:
         st.write("")
         st.write("")
-        if st.button(" Agregar Ticker", use_container_width=True, key="btn_agregar"):
+        if st.button("➕ Agregar Ticker", use_container_width=True, key="btn_agregar"):
             if ticker_nuevo and ticker_nuevo not in todos_los_tickers:
                 try:
                     stock_test = yf.Ticker(ticker_nuevo)
@@ -1267,9 +1153,6 @@ with tab3:
     if len(tickers_seleccionados) < 2:
         st.warning("⚠️ Selecciona al menos 2 activos para continuar.")
     else:
-        # ==============================================================================
-        # INGRESO DE COMPOSICIÓN ACTUAL
-        # ==============================================================================
         st.subheader("2. Composición de tu Portafolio Actual")
         
         modo_ingreso = st.radio(
@@ -1335,13 +1218,8 @@ with tab3:
                 pesos_input = {t: (v/capital_total)*100 for t, v in montos_input.items()}
         
         st.divider()
+        st.subheader("3. Evaluación del Portafolio Actual")
         
-        # ==============================================================================
-        # EVALUACIÓN DEL PORTFOLIO ACTUAL
-        # ==============================================================================
-                st.subheader("3. Evaluación del Portafolio Actual")
-        
-        # CORRECCIÓN DE INDENTACIÓN: Sin espacios extra al inicio
         if puede_evaluar and st.button("📊 Evaluar Portafolio Actual", type="primary", key="btn_evaluar"):
             with st.spinner("Calculando métricas con datos reales..."):
                 datos_activos = {}
@@ -1387,7 +1265,7 @@ with tab3:
                     }
                     st.success("✅ Evaluación completada con matriz de covarianza real")
                     st.rerun()
-        # Mostrar resultados de evaluación si existen
+        
         if st.session_state.resultado_evaluacion:
             eval_result = st.session_state.resultado_evaluacion
             
@@ -1419,10 +1297,6 @@ with tab3:
                 st.warning(f"**Portafolio mejorable.** Sharpe de {eval_result['sharpe']:.2f}")
             
             st.divider()
-            
-            # ==============================================================================
-            # OPTIMIZACIÓN
-            # ==============================================================================
             st.subheader("4. Optimización del Portafolio")
             
             col1, col2 = st.columns(2)
@@ -1445,13 +1319,11 @@ with tab3:
                 with st.spinner("Optimizando..."):
                     opt_result = optimizar_portafolio(eval_result['tickers'], rf=rf_opt/100)
                     
-                                        if opt_result:
+                    if opt_result:
                         opt_result['pesos'] = np.minimum(opt_result['pesos'], max_peso/100)
                         opt_result['pesos'] /= opt_result['pesos'].sum()
                         
-                        # CORRECCIÓN CRÍTICA: Usar la matriz de covarianza REAL que ya devolvió la función
                         cov_matrix_real = opt_result['cov_matrix']
-                        
                         retornos = np.array([eval_result['datos_activos'][t]['retorno_anual'] for t in opt_result['tickers']])
                         
                         opt_result['retorno'] = np.sum(retornos * opt_result['pesos']) * 100
@@ -1462,7 +1334,6 @@ with tab3:
                         st.success("✅ Optimización completada con datos históricos reales")
                         st.rerun()
             
-            # Mostrar resultados de optimización si existen
             if st.session_state.resultado_optimizacion:
                 opt = st.session_state.resultado_optimizacion
                 
@@ -1475,10 +1346,6 @@ with tab3:
                 col3.metric("Sharpe Óptimo", f"{opt['sharpe']:.2f}")
                 
                 st.divider()
-                
-                # ==============================================================================
-                # REBALANCEO
-                # ==============================================================================
                 st.subheader("6. Plan de Rebalanceo")
                 
                 df_rebalanceo = pd.DataFrame()
