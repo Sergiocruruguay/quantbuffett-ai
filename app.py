@@ -1425,7 +1425,7 @@ with tab3:
                 mejora_sharpe = opt['sharpe'] - eval_result['sharpe']
                 if mejora_sharpe > 0:
                     st.success(f"✅ La optimización mejora el Sharpe en {mejora_sharpe:.2f}")
-                                                    st.divider()
+                st.divider()
                 
                 if st.button("📥 Descargar PDF del Portafolio"):
                     with st.spinner("Generando reporte PDF..."):
