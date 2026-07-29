@@ -13,6 +13,7 @@ from scipy.optimize import minimize
 import yfinance as yf
 import tempfile
 from fpdf import FPDF
+import concurrent.futures
 
 # ==============================================================================
 # CONFIGURACIÓN INICIAL
@@ -393,50 +394,89 @@ def pronosticar_precio(ticker: str, dias_pronostico: int = 90) -> dict:
 # ==============================================================================
 # FUNCIONES DE PORTAFOLIO
 # ==============================================================================
+def fetch_historical_returns(ticker):
+    """Función auxiliar para descargar retornos diarios en paralelo."""
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period='1y')
+        if len(hist) < 50:
+            return ticker, None
+        returns = hist['Close'].pct_change().dropna()
+        return ticker, returns
+    except Exception:
+        return ticker, None
+
 def optimizar_portafolio(tickers: list, rf: float = 0.04) -> dict:
-    """Optimización de Markowitz con datos reales."""
+    """
+    Optimización de Markowitz usando Matriz de Covarianza REAL histórica 
+    y ejecución paralela para máximo rendimiento.
+    """
+    # 1. Obtener datos fundamentales en paralelo (para retornos esperados)
     datos_tickers = {}
-    for t in tickers:
-        datos = obtener_datos_financieros(t)
-        if datos:
-            datos_tickers[t] = datos
-    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(obtener_datos_financieros, t): t for t in tickers}
+        for future in concurrent.futures.as_completed(futures):
+            t = futures[future]
+            try:
+                res = future.result()
+                if res:
+                    datos_tickers[t] = res
+            except Exception:
+                pass
+
     if len(datos_tickers) < 2:
         return None
+
+    valid_tickers = list(datos_tickers.keys())
     
-    n = len(datos_tickers)
-    tickers_validos = list(datos_tickers.keys())
-    retornos = np.array([datos_tickers[t]['retorno_anual'] for t in tickers_validos])
-    volatilidades = np.array([datos_tickers[t]['volatilidad_anual'] for t in tickers_validos])
+    # 2. Obtener Matriz de Covarianza REAL histórica en paralelo
+    returns_dict = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        results = executor.map(fetch_historical_returns, valid_tickers)
+        
+    cov_valid_tickers = []
+    for ticker, returns in results:
+        if returns is not None:
+            returns_dict[ticker] = returns
+            cov_valid_tickers.append(ticker)
     
-    correlacion = np.eye(n)
-    for i in range(n):
-        for j in range(i+1, n):
-            correlacion[i,j] = correlacion[j,i] = 0.3
+    # Intersectar para asegurar consistencia entre datos fundamentales e históricos
+    tickers_finales = list(set(valid_tickers) & set(cov_valid_tickers))
+    if len(tickers_finales) < 2:
+        return None
+        
+    # Crear DataFrame de retornos y calcular matriz de covarianza anualizada (252 días)
+    returns_df = pd.DataFrame({t: returns_dict[t] for t in tickers_finales})
+    cov_matrix = returns_df.cov() * 252  # Anualizar
     
-    cov_matrix = np.outer(volatilidades, volatilidades) * correlacion
+    # Asegurar que los arrays estén en el mismo orden que la matriz
+    retornos = np.array([datos_tickers[t]['retorno_anual'] for t in tickers_finales])
     
+    # CORRECCIÓN CRÍTICA: Si el retorno es None, usar 5% (conservador), NUNCA 15% (optimista engañoso)
+    retornos = np.array([r if r is not None else 0.05 for r in retornos])
+
+    # 3. Función de optimización (Maximizar Sharpe)
     def sharpe_negativo(pesos):
         port_retorno = np.sum(retornos * pesos)
         port_vol = np.sqrt(np.dot(pesos.T, np.dot(cov_matrix, pesos)))
         sharpe = (port_retorno - rf) / port_vol if port_vol > 0 else 0
         return -sharpe
-    
+
     restricciones = {'type': 'eq', 'fun': lambda x: np.sum(x) - 1.0}
-    limites = tuple((0.0, 1.0) for _ in range(n))
+    limites = tuple((0.0, 1.0) for _ in range(len(tickers_finales)))
+    pesos_iniciales = np.ones(len(tickers_finales)) / len(tickers_finales)
     
-    pesos_iniciales = np.ones(n) / n
-    resultado = minimize(sharpe_negativo, pesos_iniciales,
-                        method='SLSQP', bounds=limites, constraints=restricciones)
+    resultado = minimize(sharpe_negativo, pesos_iniciales, method='SLSQP', bounds=limites, constraints=restricciones)
     
     pesos_optimos = resultado.x
     retorno_optimo = np.sum(retornos * pesos_optimos)
     volatilidad_optima = np.sqrt(np.dot(pesos_optimos.T, np.dot(cov_matrix, pesos_optimos)))
-    sharpe_optimo = (retorno_optimo - rf) / volatilidad_optima
+    sharpe_optimo = (retorno_optimo - rf) / volatilidad_optima if volatilidad_optima > 0 else 0
     
+    # 4. Simulación Monte Carlo para la Frontera Eficiente (UI)
     mc_retornos, mc_vols, mc_sharpes = [], [], []
     for _ in range(1000):
-        pesos_rand = np.random.random(n)
+        pesos_rand = np.random.random(len(tickers_finales))
         pesos_rand /= np.sum(pesos_rand)
         r = np.sum(retornos * pesos_rand)
         v = np.sqrt(np.dot(pesos_rand.T, np.dot(cov_matrix, pesos_rand)))
@@ -446,11 +486,13 @@ def optimizar_portafolio(tickers: list, rf: float = 0.04) -> dict:
         mc_sharpes.append(s)
     
     return {
-        'tickers': tickers_validos, 'pesos': pesos_optimos,
-        'retorno': retorno_optimo * 100, 'volatilidad': volatilidad_optima * 100,
+        'tickers': tickers_finales, 
+        'pesos': pesos_optimos,
+        'retorno': retorno_optimo * 100, 
+        'volatilidad': volatilidad_optima * 100,
         'sharpe': sharpe_optimo,
-        'mc_data': {'retornos': mc_retornos, 'volatilidades': mc_vols, 'sharpes': mc_sharpes},
-        'correlacion': correlacion
+        'cov_matrix': cov_matrix, # Matriz REAL para la UI
+        'mc_data': {'retornos': mc_retornos, 'volatilidades': mc_vols, 'sharpes': mc_sharpes}
     }
 
 # ==============================================================================
