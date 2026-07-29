@@ -231,10 +231,12 @@ def analizar_riesgos_ia(ticker: str) -> dict:
             'recomendacion': 'No se pudieron obtener datos para analizar riesgos.'
         }
     
-    riesgos = []
+        riesgos = []
     
-    # 1. Riesgo Financiero
-    deuda_ebitda = datos.get('deuda_ebitda', 2.0)
+    # 1. Riesgo Financiero (Manejo seguro de None)
+    deuda_ebitda = datos.get('deuda_ebitda')
+    if deuda_ebitda is None: deuda_ebitda = 2.0 # Fallback seguro para visualización
+    
     if deuda_ebitda > 3.0: severidad, nivel = 90, "Crítico"
     elif deuda_ebitda > 2.0: severidad, nivel = 70, "Alto"
     elif deuda_ebitda > 1.0: severidad, nivel = 50, "Moderado"
@@ -247,8 +249,10 @@ def analizar_riesgos_ia(ticker: str) -> dict:
         'mitigacion': 'Mantener política de deuda conservadora' if deuda_ebitda <= 2 else 'Reducir deuda'
     })
     
-    # 2. Riesgo Operativo (ROIC)
-    roic = datos.get('roic', 20)
+    # 2. Riesgo Operativo (ROIC) (Manejo seguro de None)
+    roic = datos.get('roic')
+    if roic is None: roic = 15.0 # Fallback seguro
+    
     if roic < 10: severidad, nivel = 85, "Crítico"
     elif roic < 15: severidad, nivel = 60, "Alto"
     elif roic < 25: severidad, nivel = 40, "Moderado"
@@ -261,19 +265,14 @@ def analizar_riesgos_ia(ticker: str) -> dict:
         'mitigacion': 'Continuar con estrategia rentable' if roic >= 15 else 'Optimizar asignación de capital'
     })
     
-    # 3. Riesgo de Mercado (Margen de Seguridad)
-    margen = datos.get('margen_seguridad', 0)
+    # 3. Riesgo de Mercado (Margen de Seguridad) (Manejo seguro de None)
+    margen = datos.get('margen_seguridad')
+    if margen is None: margen = 0.0
+    
     if margen < -20: severidad, nivel = 80, "Crítico"
     elif margen < 0: severidad, nivel = 60, "Alto"
     elif margen < 15: severidad, nivel = 40, "Moderado"
     else: severidad, nivel = 20, "Bajo"
-    
-    riesgos.append({
-        'categoria': 'Mercado',
-        'descripcion': f"Margen de seguridad del {margen:.1f}%",
-        'severidad': severidad, 'nivel': nivel,
-        'mitigacion': 'Precio ofrece protección' if margen >= 0 else 'Esperar corrección'
-    })
     
     # 4. Riesgo Sistemático (Beta)
     beta = datos.get('beta', 1.0)
@@ -532,11 +531,14 @@ def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict
     pdf.alias_nb_pages()
     pdf.add_page()
     
-    pdf.set_font('Helvetica', 'B', 24)
+    # Detectar si la fuente UTF-8 se cargó correctamente
+    font_base = 'DejaVu' if 'DejaVu' in pdf.fonts else 'Helvetica'
+    
+    pdf.set_font(font_base, 'B', 24)
     pdf.set_text_color(26, 54, 93)
     pdf.cell(0, 20, f'Analisis: {ticker}', 0, 1, 'C')
     
-    pdf.set_font('Helvetica', '', 12)
+    pdf.set_font(font_base, '', 12)
     pdf.set_text_color(100, 100, 100)
     pdf.cell(0, 10, f'Fecha: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
     pdf.cell(0, 10, f'Fuente: {datos.get("fuente", "No disponible")}', 0, 1, 'C')
@@ -547,8 +549,13 @@ def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict
     pdf.metric_row('P/E Ratio:', f'{datos.get("pe_ratio", 0):.1f}x')
     pdf.metric_row('EPS:', f'${datos.get("eps", 0):.2f}')
     pdf.metric_row('Beta:', f'{datos.get("beta", 1.0):.2f}')
-    pdf.metric_row('ROIC:', f'{datos.get("roic", 0):.1f}%')
-    pdf.metric_row('Deuda/EBITDA:', f'{datos.get("deuda_ebitda", 0):.2f}x')
+    
+    # Manejo seguro de None para el PDF
+    roic_txt = f"{datos.get('roic', 0):.1f}%" if datos.get('roic') is not None else "N/A"
+    deuda_txt = f"{datos.get('deuda_ebitda', 0):.2f}x" if datos.get('deuda_ebitda') is not None else "N/A"
+    
+    pdf.metric_row('ROIC:', roic_txt)
+    pdf.metric_row('Deuda/EBITDA:', deuda_txt)
     pdf.metric_row('Market Cap:', f'${datos.get("market_cap", 0)/1e9:.1f}B')
     pdf.metric_row('Dividend Yield:', f'{datos.get("dividend_yield", 0):.2f}%')
     pdf.ln(5)
@@ -565,30 +572,30 @@ def generar_pdf_activo(ticker: str, datos: dict, pronostico: dict, riesgos: dict
     pdf.metric_row('Perfil:', riesgos['perfil_riesgo'])
     pdf.ln(3)
     
-    pdf.set_font('Helvetica', 'B', 11)
+    pdf.set_font(font_base, 'B', 11)
     pdf.cell(0, 8, 'Riesgos Identificados:', 0, 1)
     for i, riesgo in enumerate(riesgos['riesgos'], 1):
-        pdf.set_font('Helvetica', '', 9)
+        pdf.set_font(font_base, '', 9)
         pdf.set_text_color(0, 0, 0)
         pdf.cell(0, 6, f'{i}. {riesgo["categoria"]} - {riesgo["nivel"]} ({riesgo["severidad"]}/100)', 0, 1)
-        pdf.set_font('Helvetica', 'I', 8)
+        pdf.set_font(font_base, 'I', 8)
         pdf.set_text_color(80, 80, 80)
         pdf.cell(0, 5, f'   {riesgo["descripcion"][:80]}', 0, 1)
     
     pdf.ln(5)
     pdf.section_title('Veredicto Final')
-    pdf.set_font('Helvetica', 'B', 12)
+    pdf.set_font(font_base, 'B', 12)
     pdf.set_text_color(0, 0, 0)
     veredicto = "PERFIL CONSERVADOR" if riesgos['score_riesgo'] < 30 else "PERFIL BALANCEADO" if riesgos['score_riesgo'] < 50 else "PERFIL AGRESIVO"
     pdf.cell(0, 10, veredicto, 0, 1, 'C')
-    pdf.set_font('Helvetica', '', 10)
+    pdf.set_font(font_base, '', 10)
     pdf.multi_cell(0, 6, riesgos['recomendacion'])
     
     pdf.ln(10)
     pdf.set_draw_color(200, 200, 200)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(5)
-    pdf.set_font('Helvetica', 'I', 7)
+    pdf.set_font(font_base, 'I', 7)
     pdf.set_text_color(128, 128, 128)
     pdf.multi_cell(0, 4, 'DISCLAIMER: Reporte generado automaticamente con fines informativos. No constituye asesoramiento financiero.')
     
@@ -601,11 +608,14 @@ def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> s
     pdf.alias_nb_pages()
     pdf.add_page()
     
-    pdf.set_font('Helvetica', 'B', 24)
+    # Detectar si la fuente UTF-8 se cargó correctamente
+    font_base = 'DejaVu' if 'DejaVu' in pdf.fonts else 'Helvetica'
+    
+    pdf.set_font(font_base, 'B', 24)
     pdf.set_text_color(26, 54, 93)
     pdf.cell(0, 20, 'Analisis de Portafolio', 0, 1, 'C')
     
-    pdf.set_font('Helvetica', '', 12)
+    pdf.set_font(font_base, '', 12)
     pdf.set_text_color(100, 100, 100)
     pdf.cell(0, 10, f'Fecha: {datetime.now().strftime("%d/%m/%Y %H:%M")}', 0, 1, 'C')
     pdf.cell(0, 10, f'Activos: {", ".join(tickers)}', 0, 1, 'C')
@@ -619,7 +629,7 @@ def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> s
     pdf.ln(5)
     
     pdf.section_title('Asignacion Optima de Capital')
-    pdf.set_font('Helvetica', 'B', 10)
+    pdf.set_font(font_base, 'B', 10)
     pdf.set_fill_color(26, 54, 93)
     pdf.set_text_color(255, 255, 255)
     pdf.cell(50, 8, 'Activo', 1, 0, 'C', True)
@@ -629,14 +639,19 @@ def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> s
     pdf.cell(30, 8, 'Riesgo', 1, 1, 'C', True)
     
     pdf.set_text_color(0, 0, 0)
-    pdf.set_font('Helvetica', '', 9)
+    pdf.set_font(font_base, '', 9)
     
     for i, ticker in enumerate(opt_result['tickers']):
         peso = opt_result['pesos'][i] * 100
         monto = opt_result['pesos'][i] * capital
         datos_ticker = obtener_datos_financieros(ticker)
-        retorno_indiv = (datos_ticker.get('retorno_anual', 0.12) if datos_ticker else 0.12) * 100
-        volatilidad_indiv = (datos_ticker.get('volatilidad_anual', 0.25) if datos_ticker else 0.25) * 100
+        
+        # Manejo seguro de None
+        ret_anual = datos_ticker.get('retorno_anual') if datos_ticker else None
+        vol_anual = datos_ticker.get('volatilidad_anual') if datos_ticker else None
+        
+        retorno_indiv = (ret_anual * 100) if ret_anual is not None else 0.0
+        volatilidad_indiv = (vol_anual * 100) if vol_anual is not None else 0.0
         
         if i % 2 == 0: pdf.set_fill_color(240, 240, 240)
         else: pdf.set_fill_color(255, 255, 255)
@@ -654,14 +669,14 @@ def generar_pdf_portafolio(tickers: list, opt_result: dict, capital: float) -> s
     elif volatilidad < 25: perfil = "MODERADO - Balance crecimiento/estabilidad"
     else: perfil = "AGRESIVO - Maximizacion de ganancias"
     
-    pdf.set_font('Helvetica', 'B', 12)
+    pdf.set_font(font_base, 'B', 12)
     pdf.cell(0, 10, perfil, 0, 1, 'C')
     
     pdf.ln(10)
     pdf.set_draw_color(200, 200, 200)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(5)
-    pdf.set_font('Helvetica', 'I', 7)
+    pdf.set_font(font_base, 'I', 7)
     pdf.set_text_color(128, 128, 128)
     pdf.multi_cell(0, 4, 'DISCLAIMER: La optimizacion de Markowitz se basa en datos historicos que no garantizan resultados futuros.')
     
@@ -958,7 +973,7 @@ with tab2:
             else:
                 st.warning("Ya está en la Watchlist")
     
-    if st.button("🔍 Analizar", type="primary"):
+        if st.button("🔍 Analizar", type="primary"):
         with st.spinner("Calculando ratios desde estados financieros crudos..."):
             datos = obtener_datos_financieros(ticker_input)
             if datos:
@@ -967,6 +982,93 @@ with tab2:
             else:
                 st.session_state.datos_activo = None
                 st.session_state.error_activo = f"No se pudieron obtener datos para {ticker_input}. Verifica el ticker."
+    
+    # CORRECCIÓN DE INDENTACIÓN: Este bloque debe estar al mismo nivel que el "if st.button"
+    if st.session_state.get('error_activo'):
+        st.error(st.session_state.error_activo)
+    elif 'datos_activo' in st.session_state and st.session_state.datos_activo:
+        datos = st.session_state.datos_activo
+        
+        st.success(f"✅ Datos calculados manualmente de {datos.get('fuente', 'Yahoo Finance')}")
+        
+        if modo_usuario == "🟢 Simple (Principiantes)":
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("💰 Precio", f"${datos['precio']:.2f}")
+            col2.metric("📈 P/E", f"{datos.get('pe_ratio', 0):.1f}x")
+            
+            roic_str = f"{datos['roic']:.1f}%" if datos.get('roic') is not None else "N/A"
+            col3.metric("📊 ROIC", roic_str)
+            col4.metric("🎯 Beta", f"{datos.get('beta', 1):.2f}")
+            
+            st.divider()
+            
+            roic = datos.get('roic', 0) or 0
+            deuda = datos.get('deuda_ebitda', 99) or 99
+            
+            if roic > 15 and deuda < 2:
+                st.success("### 🟢 SEÑAL CUANTITATIVA POSITIVA\n**Fundamentales sólidos:**\n- ✅ ROIC atractivo (>15%)\n- ✅ Deuda controlada (<2x EBITDA)\n*Nota: Esto no constituye una recomendación de compra.*")
+            elif roic > 10:
+                st.warning("### 🟡 SEÑAL NEUTRA / EN OBSERVACIÓN\n**Requiere análisis adicional:**\n- ⚠️ Revisar nivel de deuda y valoración actual.")
+            else:
+                st.info("### 🔴 SEÑAL CUANTITATIVA NEGATIVA\n**Fundamentales débiles o precio elevado:**\n- Revisar tendencias históricas y riesgos.")
+            
+            st.divider()
+            if st.button("📥 Descargar PDF del Análisis"):
+                with st.spinner("Generando PDF..."):
+                    try:
+                        pronostico = pronosticar_precio(ticker_input, 90)
+                        riesgos = analizar_riesgos_ia(ticker_input)
+                        if pronostico and riesgos:
+                            pdf_path = generar_pdf_activo(ticker_input, datos, pronostico, riesgos)
+                            with open(pdf_path, 'rb') as f:
+                                st.download_button(label="⬇️ Descargar PDF", data=f.read(), file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", type="primary")
+                            st.success("✅ PDF generado correctamente")
+                    except Exception as e:
+                        st.error(f"Error al generar PDF: {str(e)}")
+        
+        else: # Modo Avanzado
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("💰 Precio", f"${datos['precio']:.2f}")
+            col2.metric("📈 P/E", f"{datos.get('pe_ratio', 0):.1f}x")
+            col3.metric("📊 ROIC", f"{datos.get('roic', 0):.1f}%" if datos.get('roic') is not None else "N/A")
+            col4.metric("🎯 Beta", f"{datos.get('beta', 1):.2f}")
+            
+            st.divider()
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("💵 EPS", f"${datos.get('eps', 0):.2f}")
+                st.metric("🏢 Sector", datos.get('sector', 'N/A'))
+            with col2:
+                st.metric("💼 Market Cap", f"${datos.get('market_cap', 0)/1e9:.1f}B")
+                st.metric("🏭 Industria", datos.get('industry', 'N/A'))
+            
+            if datos.get('descripcion'):
+                st.divider()
+                st.subheader("📝 Descripción de la Empresa")
+                st.write(datos['descripcion'])
+            
+            st.divider()
+            st.subheader("🧠 El Veredicto de Buffett")
+            st.markdown("*Análisis basado en la filosofía de Inversión de Valor*")
+            
+            with st.expander("📖 Leer análisis completo", expanded=True):
+                narrativa = generar_narrativa_buffett(datos)
+                st.markdown(narrativa)
+                st.caption("⚠️ Nota: Análisis generado por motor de reglas basado en principios históricos. No es asesoramiento financiero.")
+            
+            st.divider()
+            if st.button("📥 Descargar PDF del Análisis"):
+                with st.spinner("Generando PDF..."):
+                    try:
+                        pronostico = pronosticar_precio(ticker_input, 90)
+                        riesgos = analizar_riesgos_ia(ticker_input)
+                        if pronostico and riesgos:
+                            pdf_path = generar_pdf_activo(ticker_input, datos, pronostico, riesgos)
+                            with open(pdf_path, 'rb') as f:
+                                st.download_button(label="⬇️ Descargar PDF", data=f.read(), file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", type="primary")
+                            st.success("✅ PDF generado correctamente")
+                    except Exception as e:
+                        st.error(f"Error al generar PDF: {str(e)}")
     
         if st.session_state.get('error_activo'):
         st.error(st.session_state.error_activo)
@@ -1222,9 +1324,10 @@ with tab3:
         # ==============================================================================
         # EVALUACIÓN DEL PORTFOLIO ACTUAL
         # ==============================================================================
-        st.subheader("3. Evaluación del Portafolio Actual")
+                st.subheader("3. Evaluación del Portafolio Actual")
         
-               if puede_evaluar and st.button("📊 Evaluar Portafolio Actual", type="primary", key="btn_evaluar"):
+        # CORRECCIÓN DE INDENTACIÓN: Sin espacios extra al inicio
+        if puede_evaluar and st.button("📊 Evaluar Portafolio Actual", type="primary", key="btn_evaluar"):
             with st.spinner("Calculando métricas con datos reales..."):
                 datos_activos = {}
                 for ticker in tickers_seleccionados:
@@ -1235,7 +1338,6 @@ with tab3:
                 if len(datos_activos) >= 2:
                     tickers_validos = [t for t in tickers_seleccionados if t in datos_activos]
                     
-                    # CORRECCIÓN CRÍTICA: Usar covarianza REAL en lugar de 0.3 fijo
                     returns_dict_eval = {}
                     for t in tickers_validos:
                         _, returns = fetch_historical_returns(t)
@@ -1246,15 +1348,13 @@ with tab3:
                         returns_df_eval = pd.DataFrame(returns_dict_eval)
                         tickers_con_retorno = list(returns_df_eval.columns)
                         
-                        # Alinear pesos y retornos con los tickers que tienen datos históricos
                         pesos_array = np.array([pesos_input[t]/100 for t in tickers_con_retorno])
                         retornos_array = np.array([datos_activos[t]['retorno_anual'] for t in tickers_con_retorno])
                         
-                        # Matriz de covarianza anualizada REAL
                         cov_matrix_real = returns_df_eval.cov() * 252
                         volatilidad_portafolio = np.sqrt(np.dot(pesos_array.T, np.dot(cov_matrix_real, pesos_array))) * 100
                     else:
-                        volatilidad_portafolio = 0.0 # Fallback seguro si no hay histórico
+                        volatilidad_portafolio = 0.0
                     
                     rf = 0.04
                     retorno_portafolio = np.sum(pesos_array * retornos_array) * 100
@@ -1270,7 +1370,6 @@ with tab3:
                         'sharpe': sharpe_portafolio,
                         'datos_activos': datos_activos
                     }
-                    
                     st.success("✅ Evaluación completada con matriz de covarianza real")
                     st.rerun()
         # Mostrar resultados de evaluación si existen
@@ -1331,24 +1430,21 @@ with tab3:
                 with st.spinner("Optimizando..."):
                     opt_result = optimizar_portafolio(eval_result['tickers'], rf=rf_opt/100)
                     
-                    if opt_result:
+                                        if opt_result:
                         opt_result['pesos'] = np.minimum(opt_result['pesos'], max_peso/100)
                         opt_result['pesos'] /= opt_result['pesos'].sum()
                         
+                        # CORRECCIÓN CRÍTICA: Usar la matriz de covarianza REAL que ya devolvió la función
+                        cov_matrix_real = opt_result['cov_matrix']
+                        
                         retornos = np.array([eval_result['datos_activos'][t]['retorno_anual'] for t in opt_result['tickers']])
-                        volatilidades = np.array([eval_result['datos_activos'][t]['volatilidad_anual'] for t in opt_result['tickers']])
-                        correlacion = np.eye(len(opt_result['tickers']))
-                        for i in range(len(opt_result['tickers'])):
-                            for j in range(i+1, len(opt_result['tickers'])):
-                                correlacion[i,j] = correlacion[j,i] = 0.3
-                        cov_matrix = np.outer(volatilidades, volatilidades) * correlacion
                         
                         opt_result['retorno'] = np.sum(retornos * opt_result['pesos']) * 100
-                        opt_result['volatilidad'] = np.sqrt(np.dot(opt_result['pesos'].T, np.dot(cov_matrix, opt_result['pesos']))) * 100
-                        opt_result['sharpe'] = (opt_result['retorno']/100 - rf_opt/100) / (opt_result['volatilidad']/100)
+                        opt_result['volatilidad'] = np.sqrt(np.dot(opt_result['pesos'].T, np.dot(cov_matrix_real, opt_result['pesos']))) * 100
+                        opt_result['sharpe'] = (opt_result['retorno']/100 - rf_opt/100) / (opt_result['volatilidad']/100) if opt_result['volatilidad'] > 0 else 0
                         
                         st.session_state.resultado_optimizacion = opt_result
-                        st.success("✅ Optimización completada")
+                        st.success("✅ Optimización completada con datos históricos reales")
                         st.rerun()
             
             # Mostrar resultados de optimización si existen
