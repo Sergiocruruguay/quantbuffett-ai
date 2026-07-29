@@ -980,7 +980,6 @@ with tab1:
                     st.warning(f"⚠️ {ticker}: No se pudieron obtener datos")
         else:
             st.info("Agrega tickers a tu Watchlist desde la barra lateral.")
-
 # ==============================================================================
 # PESTAÑA 2: ANÁLISIS DE ACTIVO
 # ==============================================================================
@@ -1033,43 +1032,39 @@ with tab2:
             deuda = datos.get('deuda_ebitda', 99) or 99
             
             if roic > 15 and deuda < 2:
-                st.success("### 🟢 SEÑAL CUANTITATIVA POSITIVA\n**Fundamentales sólidos:**\n- ✅ ROIC atractivo (>15%)\n- ✅ Deuda controlada (<2x EBITDA)\n*Nota: Esto no constituye una recomendación de compra.*")
+                st.success("###  SEÑAL CUANTITATIVA POSITIVA\n**Fundamentales sólidos:**\n- ✅ ROIC atractivo (>15%)\n- ✅ Deuda controlada (<2x EBITDA)\n*Nota: Esto no constituye una recomendación de compra.*")
             elif roic > 10:
                 st.warning("### 🟡 SEÑAL NEUTRA / EN OBSERVACIÓN\n**Requiere análisis adicional:**\n- ⚠️ Revisar nivel de deuda y valoración actual.")
             else:
                 st.info("### 🔴 SEÑAL CUANTITATIVA NEGATIVA\n**Fundamentales débiles o precio elevado:**\n- Revisar tendencias históricas y riesgos.")
             
-                        st.divider()
+            st.divider()
+            
             if st.button("📥 Descargar PDF del Análisis"):
                 with st.spinner("Generando reporte PDF..."):
                     try:
-                        # 1. Obtener cada componente de forma independiente y segura
                         datos_pdf = st.session_state.datos_activo
                         pronostico_pdf = pronosticar_precio(ticker_input, 90)
                         riesgos_pdf = analizar_riesgos_ia(ticker_input)
                         
-                        # 2. Validación estricta: si alguno es None o vacío, detenemos el proceso
                         if not datos_pdf or not pronostico_pdf or not riesgos_pdf:
                             st.error("❌ No se pudieron obtener todos los datos necesarios para generar el reporte.")
                         else:
-                            # 3. Generar PDF solo si las 3 variables son válidas
                             pdf_path = generar_pdf_activo(ticker_input, datos_pdf, pronostico_pdf, riesgos_pdf)
                             
                             with open(pdf_path, 'rb') as f:
                                 st.download_button(
-                                    label="⬇️ Descargar PDF",
+                                    label="️ Descargar PDF",
                                     data=f.read(),
                                     file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf",
                                     mime="application/pdf",
                                     type="primary"
                                 )
                             st.success("✅ PDF generado correctamente")
-                            
                     except Exception as e:
-                        # Manejo de errores genérico que nunca fallará
-                        st.error(f"❌ Error crítico al generar el PDF: {str(e)}")
+                        st.error(f"❌ Error al generar PDF: {str(e)}")
         
-        else: # Modo Avanzado
+        else:  # Modo Avanzado
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("💰 Precio", f"${datos['precio']:.2f}")
             col2.metric("📈 P/E", f"{datos.get('pe_ratio', 0):.1f}x")
@@ -1087,7 +1082,7 @@ with tab2:
             
             if datos.get('descripcion'):
                 st.divider()
-                st.subheader("📝 Descripción de la Empresa")
+                st.subheader(" Descripción de la Empresa")
                 st.write(datos['descripcion'])
             
             st.divider()
@@ -1100,18 +1095,30 @@ with tab2:
                 st.caption("⚠️ Nota: Análisis generado por motor de reglas basado en principios históricos. No es asesoramiento financiero.")
             
             st.divider()
+            
             if st.button("📥 Descargar PDF del Análisis"):
-                with st.spinner("Generando PDF..."):
+                with st.spinner("Generando reporte PDF..."):
                     try:
-                        pronostico = pronosticar_precio(ticker_input, 90)
-                        riesgos = analizar_riesgos_ia(ticker_input)
-                        if pronostico and riesgos:
-                            pdf_path = generar_pdf_activo(ticker_input, datos, pronostico, riesgos)
+                        datos_pdf = st.session_state.datos_activo
+                        pronostico_pdf = pronosticar_precio(ticker_input, 90)
+                        riesgos_pdf = analizar_riesgos_ia(ticker_input)
+                        
+                        if not datos_pdf or not pronostico_pdf or not riesgos_pdf:
+                            st.error("❌ No se pudieron obtener todos los datos necesarios para generar el reporte.")
+                        else:
+                            pdf_path = generar_pdf_activo(ticker_input, datos_pdf, pronostico_pdf, riesgos_pdf)
+                            
                             with open(pdf_path, 'rb') as f:
-                                st.download_button(label="⬇️ Descargar PDF", data=f.read(), file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", type="primary")
+                                st.download_button(
+                                    label="️ Descargar PDF",
+                                    data=f.read(),
+                                    file_name=f"Analisis_{ticker_input}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                    mime="application/pdf",
+                                    type="primary"
+                                )
                             st.success("✅ PDF generado correctamente")
                     except Exception as e:
-                        st.error(f"Error al generar PDF: {str(e)}")
+                        st.error(f"❌ Error al generar PDF: {str(e)}")
 # ==============================================================================
 # PESTAÑA 3: PORTAFOLIO - VERSIÓN ROBUSTA
 # ==============================================================================
