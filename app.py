@@ -14,6 +14,21 @@ import yfinance as yf
 import tempfile
 from fpdf import FPDF
 import concurrent.futures
+# ==============================================================================
+# DESCARGA AUTOMÁTICA DE FUENTE UTF-8 PARA PDFs (Para que funcionen los acentos)
+# ==============================================================================
+import os
+import urllib.request
+
+FONT_PATH = "DejaVuSans.ttf"
+if not os.path.exists(FONT_PATH):
+    try:
+        font_url = "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans.ttf"
+        print("Descargando fuente para soportar acentos en PDFs...")
+        urllib.request.urlretrieve(font_url, FONT_PATH)
+        print("✅ Fuente descargada exitosamente.")
+    except Exception as e:
+        print(f"⚠️ No se pudo descargar la fuente automáticamente: {e}")
 
 # ==============================================================================
 # CONFIGURACIÓN INICIAL
