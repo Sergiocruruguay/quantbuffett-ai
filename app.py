@@ -698,7 +698,7 @@ def generar_narrativa_buffett(datos: dict) -> str:
     narrativa.append("") # Espacio
     
     # 4. VEREDICTO FINAL
-    narrativa.append("### 🎯 Veredicto Final del Oráculo de Omaha")
+    narrativa.append("### 🎯 Conclusión del Análisis Cuantitativo")
     score = 0
     if roic > 15: score += 1
     if deuda < 2.0: score += 1
