@@ -130,13 +130,11 @@ def calcular_dividend_yield_real(stock, price):
         return 0.0
 
 def calcular_retorno_anual_real(stock):
-    """Calcula retorno anual usando último trimestre para evitar outliers."""
+    """Calcula retorno anual real de 1 año. Devuelve None si los datos son insuficientes o inválidos."""
     try:
-        # Usar último trimestre (3 meses)
-        hist = stock.history(period='3mo')
-        
-        if len(hist) < 50:
-            return None
+        hist = stock.history(period='1y')
+        if len(hist) < 200:
+            return None  # Mejor None que un dato inventado
         
         precio_inicial = hist['Close'].iloc[0]
         precio_final = hist['Close'].iloc[-1]
@@ -144,16 +142,18 @@ def calcular_retorno_anual_real(stock):
         if precio_inicial <= 0 or precio_final <= 0:
             return None
         
-        retorno_3m = (precio_final / precio_inicial) - 1
-        retorno_anual = retorno_3m * 4  # Anualizar
+        # Cálculo correcto de retorno periódico (no anualización lineal)
+        retorno = (precio_final / precio_inicial) - 1
         
-        # Validar: -15% a +50%
-        if -0.15 <= retorno_anual <= 0.50:
-            return retorno_anual
-        
+        # Validación estricta: si es un outlier extremo, retornamos None
+        if retorno < -0.80 or retorno > 2.0: 
+            return None
+            
+        return retorno
+    except Exception as e:
+        print(f"Error calculando retorno: {e}")
         return None
-    except:
-        return None
+
 
 def calcular_volatilidad_anual_real(stock):
     """Calcula volatilidad anual real usando desviación estándar."""
