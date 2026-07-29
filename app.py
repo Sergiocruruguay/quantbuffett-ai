@@ -1425,6 +1425,31 @@ with tab3:
                 mejora_sharpe = opt['sharpe'] - eval_result['sharpe']
                 if mejora_sharpe > 0:
                     st.success(f"✅ La optimización mejora el Sharpe en {mejora_sharpe:.2f}")
+                                    st.divider()
+                
+                # Botón de descarga de PDF del Portafolio
+                if st.button("📥 Descargar PDF del Portafolio"):
+                    with st.spinner("Generando reporte PDF..."):
+                        try:
+                            if st.session_state.resultado_optimizacion:
+                                opt = st.session_state.resultado_optimizacion
+                                capital_pdf = st.session_state.capital_total
+                                
+                                pdf_path = generar_pdf_portafolio(opt['tickers'], opt, capital_pdf)
+                                
+                                with open(pdf_path, 'rb') as f:
+                                    st.download_button(
+                                        label="⬇️ Descargar PDF",
+                                        data=f.read(),
+                                        file_name=f"Portafolio_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                        mime="application/pdf",
+                                        type="primary"
+                                    )
+                                st.success("✅ PDF generado correctamente")
+                            else:
+                                st.error(" Primero debes calcular el portafolio óptimo")
+                        except Exception as e:
+                            st.error(f"Error al generar PDF: {str(e)}")
 # ==============================================================================
 # PESTAÑA 4: PRONÓSTICO Y RIESGOS
 # ==============================================================================
